@@ -43,8 +43,8 @@ Current off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too 
 │  └──────────────┘    └────────────────────────┘  │
 │                              │                    │
 │                     ┌────────┴────────┐           │
-│                     │  Vercel KV /    │           │
-│                     │  Postgres (free)│           │
+│                     │  Upstash Redis  │           │
+│                     │  (free tier)    │           │
 │                     │  - OAuth tokens │           │
 │                     │  - User config  │           │
 │                     │  - Cached events│           │
@@ -89,7 +89,7 @@ Pi 3B/4/5 running:
 | Google Integration | **Google Calendar API v3** | OAuth 2.0, full CRUD |
 | Apple Integration | **CalDAV (via `tsdav` or raw)** | App-specific password auth, read/write |
 | Outlook Integration | **Microsoft Graph API** | OAuth 2.0 via MSAL, full CRUD |
-| Data Store | **Vercel KV (Redis)** | Token storage, event cache, user preferences |
+| Data Store | **Upstash Redis** (`@upstash/redis`) | Token storage, event cache, user preferences — Vercel KV deprecated in 2024 |
 | Auth | **NextAuth.js** | Multi-provider OAuth, session management |
 | Deployment | **Vercel (free tier)** | Auto-deploy from GitHub |
 | Version Control | **GitHub** | Source of truth, triggers Vercel deploys |
@@ -132,9 +132,9 @@ Pi 3B/4/5 running:
 - [ ] Google Calendar OAuth integration (read + write)
 - [ ] Apple iCloud CalDAV integration (read + write)
 - [ ] Outlook / Microsoft Graph integration (read + write)
-- [ ] Persistent storage (Vercel KV for tokens & config)
+- [ ] Persistent storage (Upstash Redis for tokens & config)
 - [ ] Auto-refresh / polling for calendar updates (configurable interval)
-- [ ] PWA manifest (installable on phones, add-to-homescreen)
+- [x] PWA manifest (installable on phones, add-to-homescreen)
 
 ### Phase 2 — Polish & Usability
 
@@ -292,9 +292,9 @@ AZURE_REDIRECT_URI=https://your-app.vercel.app/api/auth/outlook
 APPLE_CALDAV_USERNAME=
 APPLE_CALDAV_APP_PASSWORD=
 
-# Vercel KV (auto-populated by Vercel when KV is linked)
-KV_REST_API_URL=
-KV_REST_API_TOKEN=
+# Upstash Redis (create free DB at upstash.com, copy REST URL + token)
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
 
 # App
 NEXTAUTH_SECRET=
@@ -468,7 +468,7 @@ This project is designed to be iterated on with Claude Code. Key conventions:
 - [Microsoft Graph Calendar](https://learn.microsoft.com/en-us/graph/api/resources/calendar)
 - [tsdav (CalDAV client)](https://github.com/natelindev/tsdav)
 - [NextAuth.js](https://next-auth.js.org/)
-- [Vercel KV](https://vercel.com/docs/storage/vercel-kv)
+- [Upstash Redis](https://upstash.com/docs/redis/overall/getstarted) — replaces deprecated Vercel KV
 - [Fully Kiosk Browser](https://www.fully-kiosk.com/)
 - [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
 - [Tailscale](https://tailscale.com/)
