@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Family Hub Calendar</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #232733;
+  --surface3: #2c3040;
+  --border: #333849;
+  --text: #e8eaf0;
+  --text-dim: #8b90a0;
+  --text-faint: #555a6e;
+  --accent: #6c8cff;
+  --accent-glow: rgba(108,140,255,0.15);
+  --today-ring: #6c8cff;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 8px 32px rgba(0,0,0,0.4);
+  /* family colors */
+  --color-1: #6c8cff;
+  --color-2: #ff6b8a;
+  --color-3: #4ecdc4;
+  --color-4: #ffd166;
+  --color-5: #a78bfa;
+  --color-6: #ff8c42;
+}
+
+html, body { height:100%; overflow:hidden; }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── TOP BAR ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 10;
+}
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.logo {
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.5px;
+  color: var(--accent);
+}
+.logo span { color: var(--text-dim); font-weight: 400; }
+.nav-month {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nav-btn {
+  width: 36px; height: 36px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.15s;
+}
+.nav-btn:hover { background: var(--surface3); border-color: var(--accent); }
+.nav-btn:active { transform: scale(0.95); }
+.month-title {
+  font-size: 22px;
+  font-weight: 600;
+  min-width: 220px;
+  text-align: center;
+  letter-spacing: -0.3px;
+}
+.today-btn {
+  padding: 6px 16px;
+  background: var(--accent-glow);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.today-btn:hover { background: var(--accent); color: #fff; }
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.view-toggle {
+  display: flex;
+  background: var(--surface2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.view-btn {
+  padding: 7px 18px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.view-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+.view-btn:hover:not(.active) { color: var(--text); background: var(--surface3); }
+
+.add-event-btn {
+  padding: 8px 20px;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+  box-shadow: 0 4px 16px rgba(108,140,255,0.3);
+}
+.add-event-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(108,140,255,0.4); }
+.add-event-btn:active { transform: scale(0.97); }
+
+.clock {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  color: var(--text-dim);
+  min-width: 60px;
+  text-align: right;
+}
+
+/* ── MAIN LAYOUT ── */
+.main-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── SIDEBAR (Family + Calendars) ── */
+.sidebar {
+  width: 220px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.sidebar-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+.family-list { display: flex; flex-direction: column; gap: 4px; }
+.family-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.family-item:hover { background: var(--surface2); }
+.family-item.disabled { opacity: 0.35; }
+.family-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.family-item.disabled .family-dot {
+  background: var(--text-faint) !important;
+}
+.family-name { font-size: 14px; font-weight: 500; }
+.family-source {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace;
+}
+.cal-type-section { display: flex; flex-direction: column; gap: 4px; }
+.cal-type-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-dim);
+  transition: all 0.15s;
+}
+.cal-type-item:hover { background: var(--surface2); color: var(--text); }
+.cal-type-item.disabled { opacity: 0.35; }
+.cal-check {
+  width: 16px; height: 16px;
+  border: 2px solid var(--border);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.cal-type-item:not(.disabled) .cal-check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ── CALENDAR GRID ── */
+.calendar-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.weekday-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.weekday-cell {
+  padding: 10px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-faint);
+}
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  flex: 1;
+  overflow: hidden;
+}
+.day-cell {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: pointer;
+  transition: background 0.1s;
+  min-height: 0;
+  position: relative;
+}
+.day-cell:nth-child(7n) { border-right: none; }
+.day-cell:hover { background: var(--surface2); }
+.day-cell.other-month { opacity: 0.3; }
+.day-cell.today { background: var(--accent-glow); }
+.day-cell.selected { background: rgba(108,140,255,0.1); box-shadow: inset 0 0 0 2px var(--accent); }
+.day-number {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 6px;
+  align-self: flex-end;
+  border-radius: 50%;
+  min-width: 26px;
+  text-align: center;
+  line-height: 22px;
+}
+.day-cell.today .day-number {
+  background: var(--accent);
+  color: #fff;
+}
+.day-events {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+.day-event {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  font-weight: 500;
+  line-height: 1.5;
+  transition: filter 0.1s;
+}
+.day-event:hover { filter: brightness(1.2); }
+.day-more {
+  font-size: 10px;
+  color: var(--text-faint);
+  padding: 0 6px;
+  font-weight: 600;
+}
+
+/* ── WEEK VIEW ── */
+.week-view {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.week-view.active { display: flex; }
+.week-header {
+  display: grid;
+  grid-template-columns: 60px repeat(7, 1fr);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.week-header-cell {
+  padding: 10px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.week-header-cell .wh-day {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+.week-header-cell.today .wh-day {
+  color: var(--accent);
+}
+.week-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 60px repeat(7, 1fr);
+  overflow-y: auto;
+  position: relative;
+}
+.week-time-col {
+  display: flex;
+  flex-direction: column;
+}
+.week-time-label {
+  height: 60px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace;
+  transform: translateY(-7px);
+}
+.week-day-col {
+  border-left: 1px solid var(--border);
+  position: relative;
+}
+.week-hour-line {
+  height: 60px;
+  border-bottom: 1px solid var(--border);
+}
+.week-event {
+  position: absolute;
+  left: 2px; right: 2px;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  overflow: hidden;
+  cursor: pointer;
+  z-index: 2;
+  transition: filter 0.1s;
+  line-height: 1.3;
+}
+.week-event:hover { filter: brightness(1.2); z-index: 3; }
+.week-event-time {
+  font-size: 10px;
+  opacity: 0.8;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── DAY VIEW ── */
+.day-view {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.day-view.active { display: flex; }
+.day-view-header {
+  padding: 16px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.day-view-date {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.day-view-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+.day-timeline {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+  display: grid;
+  grid-template-columns: 70px 1fr;
+}
+.day-time-col { display: flex; flex-direction: column; }
+.day-time-label {
+  height: 60px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace;
+  transform: translateY(-7px);
+}
+.day-events-col {
+  position: relative;
+  border-left: 1px solid var(--border);
+}
+.day-hour-line {
+  height: 60px;
+  border-bottom: 1px solid var(--border);
+}
+.day-event-block {
+  position: absolute;
+  left: 4px; right: 16px;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  z-index: 2;
+  transition: filter 0.1s;
+  border-left: 4px solid;
+}
+.day-event-block:hover { filter: brightness(1.15); }
+.day-event-block .ev-title { font-weight: 600; }
+.day-event-block .ev-time {
+  font-size: 11px;
+  opacity: 0.8;
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 2px;
+}
+
+/* ── AGENDA SIDEBAR ── */
+.agenda-panel {
+  width: 300px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.agenda-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.agenda-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+.agenda-date-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 8px 8px 4px;
+  margin-top: 8px;
+}
+.agenda-date-label:first-child { margin-top: 0; }
+.agenda-item {
+  display: flex;
+  gap: 12px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.1s;
+  align-items: flex-start;
+}
+.agenda-item:hover { background: var(--surface2); }
+.agenda-time {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+  min-width: 55px;
+  padding-top: 2px;
+}
+.agenda-color {
+  width: 4px;
+  border-radius: 2px;
+  align-self: stretch;
+  flex-shrink: 0;
+}
+.agenda-info { flex: 1; min-width: 0; }
+.agenda-title {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.agenda-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* ── MONTH VIEW CONTAINER ── */
+.month-view { display: flex; flex-direction: column; flex:1; overflow:hidden; }
+.month-view.active { }
+
+/* ── MODAL ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 480px;
+  max-width: 95vw;
+  box-shadow: var(--shadow);
+  transform: translateY(20px) scale(0.97);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.modal-overlay.open .modal { transform: translateY(0) scale(1); }
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title { font-size: 18px; font-weight: 700; }
+.modal-close {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--surface2);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.modal-close:hover { background: var(--surface3); color: var(--text); }
+.modal-body { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-dim);
+}
+.form-input, .form-select {
+  padding: 12px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.form-input:focus, .form-select:focus { border-color: var(--accent); }
+.form-row { display: flex; gap: 12px; }
+.form-row .form-group { flex: 1; }
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+}
+.btn-cancel {
+  padding: 10px 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.btn-cancel:hover { background: var(--surface3); color: var(--text); }
+.btn-save {
+  padding: 10px 24px;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.15s;
+  box-shadow: 0 4px 12px rgba(108,140,255,0.3);
+}
+.btn-save:hover { box-shadow: 0 6px 20px rgba(108,140,255,0.4); }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+/* ── NOW LINE ── */
+.now-line {
+  position: absolute;
+  left: 0; right: 0;
+  height: 2px;
+  background: #ff4060;
+  z-index: 5;
+  pointer-events: none;
+}
+.now-line::before {
+  content: '';
+  position: absolute;
+  left: -5px; top: -4px;
+  width: 10px; height: 10px;
+  background: #ff4060;
+  border-radius: 50%;
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo">FamilyHub <span>Calendar</span></div>
+    <div class="nav-month">
+      <button class="nav-btn" onclick="changeMonth(-1)">‹</button>
+      <div class="month-title" id="monthTitle"></div>
+      <button class="nav-btn" onclick="changeMonth(1)">›</button>
+      <button class="today-btn" onclick="goToday()">Today</button>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="view-toggle">
+      <button class="view-btn active" data-view="month" onclick="setView('month')">Month</button>
+      <button class="view-btn" data-view="week" onclick="setView('week')">Week</button>
+      <button class="view-btn" data-view="day" onclick="setView('day')">Day</button>
+    </div>
+    <button class="add-event-btn" onclick="openModal()">＋ Add Event</button>
+    <div class="clock" id="clock"></div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main-layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div>
+      <div class="sidebar-section-title">Family</div>
+      <div class="family-list" id="familyList"></div>
+    </div>
+    <div>
+      <div class="sidebar-section-title">Calendar Type</div>
+      <div class="cal-type-section" id="calTypeList"></div>
+    </div>
+  </div>
+
+  <!-- Calendar content -->
+  <div class="calendar-area" id="calendarArea">
+    <!-- Month View -->
+    <div class="month-view active" id="monthView">
+      <div class="weekday-header" id="weekdayHeader"></div>
+      <div class="month-grid" id="monthGrid"></div>
+    </div>
+    <!-- Week View -->
+    <div class="week-view" id="weekView"></div>
+    <!-- Day View -->
+    <div class="day-view" id="dayView"></div>
+  </div>
+
+  <!-- Agenda Panel -->
+  <div class="agenda-panel">
+    <div class="agenda-header" id="agendaHeader">Today's Agenda</div>
+    <div class="agenda-body" id="agendaBody"></div>
+  </div>
+</div>
+
+<!-- Add Event Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title">New Event</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Event Title</label>
+        <input type="text" class="form-input" id="eventTitle" placeholder="What's happening?">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <input type="date" class="form-input" id="eventDate">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Person</label>
+          <select class="form-select" id="eventPerson"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Start Time</label>
+          <input type="time" class="form-input" id="eventStart" value="09:00">
+        </div>
+        <div class="form-group">
+          <label class="form-label">End Time</label>
+          <input type="time" class="form-input" id="eventEnd" value="10:00">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Calendar</label>
+        <select class="form-select" id="eventCalType">
+          <option value="personal">Personal</option>
+          <option value="work">Work</option>
+          <option value="kids">Kids</option>
+          <option value="shared">Shared</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="saveEvent()">Save Event</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATA ──
+const familyMembers = [
+  { id: 'you', name: 'You', color: 'var(--color-1)', source: 'Google', enabled: true },
+  { id: 'partner', name: 'Partner', color: 'var(--color-2)', source: 'Apple iCloud', enabled: true },
+  { id: 'kid1', name: 'Alex', color: 'var(--color-3)', source: 'Shared', enabled: true },
+  { id: 'kid2', name: 'Jordan', color: 'var(--color-4)', source: 'Shared', enabled: true },
+  { id: 'work', name: 'Work (You)', color: 'var(--color-5)', source: 'Outlook', enabled: true },
+  { id: 'workp', name: 'Work (Partner)', color: 'var(--color-6)', source: 'Outlook', enabled: true },
+];
+
+const calTypes = [
+  { id: 'personal', name: 'Personal', enabled: true },
+  { id: 'work', name: 'Work', enabled: true },
+  { id: 'kids', name: 'Kids Activities', enabled: true },
+  { id: 'shared', name: 'Shared / Family', enabled: true },
+];
+
+const today = new Date();
+let currentDate = new Date(today);
+let selectedDate = new Date(today);
+let currentView = 'month';
+
+// Generate sample events around today
+function generateEvents() {
+  const events = [];
+  const y = today.getFullYear(), m = today.getMonth();
+  const templates = [
+    { title: 'Team Standup', person: 'work', type: 'work', startH: 9, startM: 0, durM: 30 },
+    { title: 'Dentist Appt', person: 'partner', type: 'personal', startH: 10, startM: 30, durM: 60 },
+    { title: 'Soccer Practice', person: 'kid1', type: 'kids', startH: 16, startM: 0, durM: 90 },
+    { title: 'Piano Lesson', person: 'kid2', type: 'kids', startH: 15, startM: 0, durM: 45 },
+    { title: 'Date Night', person: 'you', type: 'shared', startH: 19, startM: 0, durM: 120 },
+    { title: 'Sprint Planning', person: 'work', type: 'work', startH: 10, startM: 0, durM: 60 },
+    { title: 'Grocery Run', person: 'partner', type: 'shared', startH: 11, startM: 0, durM: 60 },
+    { title: 'Swim Class', person: 'kid1', type: 'kids', startH: 9, startM: 0, durM: 60 },
+    { title: 'Book Club', person: 'partner', type: 'personal', startH: 19, startM: 30, durM: 90 },
+    { title: '1:1 w/ Manager', person: 'work', type: 'work', startH: 14, startM: 0, durM: 30 },
+    { title: 'Family Dinner', person: 'you', type: 'shared', startH: 18, startM: 0, durM: 90 },
+    { title: 'Art Class', person: 'kid2', type: 'kids', startH: 10, startM: 0, durM: 60 },
+    { title: 'Yoga', person: 'you', type: 'personal', startH: 7, startM: 0, durM: 60 },
+    { title: 'Client Call', person: 'workp', type: 'work', startH: 11, startM: 0, durM: 45 },
+    { title: 'Playdate', person: 'kid1', type: 'kids', startH: 14, startM: 0, durM: 120 },
+    { title: 'Doctor Appt', person: 'you', type: 'personal', startH: 8, startM: 30, durM: 45 },
+    { title: 'School Pickup', person: 'partner', type: 'kids', startH: 15, startM: 15, durM: 30 },
+    { title: 'Board Meeting', person: 'workp', type: 'work', startH: 13, startM: 0, durM: 60 },
+    { title: 'Park Outing', person: 'kid2', type: 'shared', startH: 10, startM: 0, durM: 120 },
+    { title: 'Haircut', person: 'you', type: 'personal', startH: 12, startM: 0, durM: 30 },
+  ];
+  // Distribute events across the month
+  for (let d = 1; d <= 31; d++) {
+    const date = new Date(y, m, d);
+    if (date.getMonth() !== m) break;
+    // 2-4 events per day
+    const count = 2 + Math.floor(Math.random() * 3);
+    const used = new Set();
+    for (let i = 0; i < count; i++) {
+      let idx;
+      do { idx = Math.floor(Math.random() * templates.length); } while (used.has(idx));
+      used.add(idx);
+      const t = templates[idx];
+      events.push({
+        id: `e${d}_${i}`,
+        title: t.title,
+        date: new Date(y, m, d),
+        startH: t.startH,
+        startM: t.startM,
+        endH: t.startH + Math.floor((t.startM + t.durM) / 60),
+        endM: (t.startM + t.durM) % 60,
+        person: t.person,
+        type: t.type,
+      });
+    }
+  }
+  return events;
+}
+
+let events = generateEvents();
+
+// ── RENDER FUNCTIONS ──
+
+function getColor(personId) {
+  const m = familyMembers.find(f => f.id === personId);
+  return m ? m.color : 'var(--text-dim)';
+}
+
+function isEventVisible(ev) {
+  const person = familyMembers.find(f => f.id === ev.person);
+  const calType = calTypes.find(c => c.id === ev.type);
+  return person && person.enabled && calType && calType.enabled;
+}
+
+function formatTime(h, m) {
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hh = h % 12 || 12;
+  return `${hh}:${String(m).padStart(2,'0')} ${ampm}`;
+}
+
+function sameDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+// ── SIDEBAR ──
+function renderSidebar() {
+  const fl = document.getElementById('familyList');
+  fl.innerHTML = familyMembers.map(f => `
+    <div class="family-item ${f.enabled ? '' : 'disabled'}" onclick="toggleFamily('${f.id}')">
+      <div class="family-dot" style="background:${f.color}"></div>
+      <div>
+        <div class="family-name">${f.name}</div>
+        <div class="family-source">${f.source}</div>
+      </div>
+    </div>
+  `).join('');
+
+  const cl = document.getElementById('calTypeList');
+  cl.innerHTML = calTypes.map(c => `
+    <div class="cal-type-item ${c.enabled ? '' : 'disabled'}" onclick="toggleCalType('${c.id}')">
+      <div class="cal-check">${c.enabled ? '✓' : ''}</div>
+      <span>${c.name}</span>
+    </div>
+  `).join('');
+
+  // Populate person select in modal
+  const sel = document.getElementById('eventPerson');
+  sel.innerHTML = familyMembers.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
+}
+
+function toggleFamily(id) {
+  const m = familyMembers.find(f => f.id === id);
+  if (m) m.enabled = !m.enabled;
+  renderSidebar();
+  renderCurrentView();
+}
+
+function toggleCalType(id) {
+  const c = calTypes.find(ct => ct.id === id);
+  if (c) c.enabled = !c.enabled;
+  renderSidebar();
+  renderCurrentView();
+}
+
+// ── MONTH VIEW ──
+function renderMonthView() {
+  const header = document.getElementById('weekdayHeader');
+  header.innerHTML = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+    .map(d => `<div class="weekday-cell">${d}</div>`).join('');
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+  document.getElementById('monthTitle').textContent =
+    currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrev = new Date(year, month, 0).getDate();
+
+  const grid = document.getElementById('monthGrid');
+  let html = '';
+  let dayNum = 1 - firstDay;
+
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(year, month, dayNum);
+    const isOther = d.getMonth() !== month;
+    const isToday = sameDay(d, today);
+    const isSel = sameDay(d, selectedDate);
+    const dayEvents = events.filter(e => sameDay(e.date, d) && isEventVisible(e));
+    const maxShow = 3;
+
+    html += `<div class="day-cell ${isOther ? 'other-month' : ''} ${isToday ? 'today' : ''} ${isSel ? 'selected' : ''}"
+      onclick="selectDate(${d.getFullYear()},${d.getMonth()},${d.getDate()})">
+      <div class="day-number">${d.getDate()}</div>
+      <div class="day-events">
+        ${dayEvents.slice(0, maxShow).map(e => `
+          <div class="day-event" style="background:${getColor(e.person)}22;color:${getColor(e.person)};border-left:3px solid ${getColor(e.person)}">${e.title}</div>
+        `).join('')}
+        ${dayEvents.length > maxShow ? `<div class="day-more">+${dayEvents.length - maxShow} more</div>` : ''}
+      </div>
+    </div>`;
+    dayNum++;
+  }
+  grid.innerHTML = html;
+}
+
+// ── WEEK VIEW ──
+function renderWeekView() {
+  const container = document.getElementById('weekView');
+  const startOfWeek = new Date(selectedDate);
+  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+
+  const days = Array.from({length: 7}, (_, i) => {
+    const d = new Date(startOfWeek);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let html = `<div class="week-header">
+    <div class="week-header-cell"></div>
+    ${days.map((d,i) => `
+      <div class="week-header-cell ${sameDay(d, today) ? 'today' : ''}">
+        <div style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.8px">${dayNames[i]}</div>
+        <div class="wh-day">${d.getDate()}</div>
+      </div>
+    `).join('')}
+  </div>
+  <div class="week-body">
+    <div class="week-time-col">
+      ${Array.from({length:24},(_,h) => `<div class="week-time-label">${h===0?'':formatTime(h,0)}</div>`).join('')}
+    </div>
+    ${days.map((d, di) => {
+      const dayEvents = events.filter(e => sameDay(e.date, d) && isEventVisible(e));
+      return `<div class="week-day-col" onclick="selectDate(${d.getFullYear()},${d.getMonth()},${d.getDate()});setView('day')">
+        ${Array.from({length:24},()=>`<div class="week-hour-line"></div>`).join('')}
+        ${dayEvents.map(e => {
+          const top = (e.startH * 60 + e.startM);
+          const height = ((e.endH * 60 + e.endM) - top);
+          return `<div class="week-event" style="top:${top}px;height:${Math.max(height,20)}px;background:${getColor(e.person)}33;color:${getColor(e.person)};border-left:3px solid ${getColor(e.person)}">
+            <div>${e.title}</div>
+            <div class="week-event-time">${formatTime(e.startH,e.startM)}</div>
+          </div>`;
+        }).join('')}
+        ${sameDay(d, today) ? `<div class="now-line" style="top:${today.getHours()*60+today.getMinutes()}px"></div>` : ''}
+      </div>`;
+    }).join('')}
+  </div>`;
+
+  container.innerHTML = html;
+
+  // scroll to 7am
+  requestAnimationFrame(() => {
+    const body = container.querySelector('.week-body');
+    if (body) body.scrollTop = 7 * 60;
+  });
+}
+
+// ── DAY VIEW ──
+function renderDayView() {
+  const container = document.getElementById('dayView');
+  const d = selectedDate;
+  const dayEvents = events.filter(e => sameDay(e.date, d) && isEventVisible(e));
+
+  const dayNames = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  container.innerHTML = `
+    <div class="day-view-header">
+      <div class="day-view-date">${dayNames[d.getDay()]}, ${d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}</div>
+    </div>
+    <div class="day-view-body">
+      <div class="day-timeline">
+        <div class="day-time-col">
+          ${Array.from({length:24},(_,h) => `<div class="day-time-label">${h===0?'':formatTime(h,0)}</div>`).join('')}
+        </div>
+        <div class="day-events-col">
+          ${Array.from({length:24},()=>`<div class="day-hour-line"></div>`).join('')}
+          ${dayEvents.map(e => {
+            const top = e.startH * 60 + e.startM;
+            const height = (e.endH * 60 + e.endM) - top;
+            return `<div class="day-event-block" style="top:${top}px;height:${Math.max(height,30)}px;background:${getColor(e.person)}1a;border-left-color:${getColor(e.person)}">
+              <div class="ev-title" style="color:${getColor(e.person)}">${e.title}</div>
+              <div class="ev-time">${formatTime(e.startH,e.startM)} – ${formatTime(e.endH,e.endM)}</div>
+            </div>`;
+          }).join('')}
+          ${sameDay(d, today) ? `<div class="now-line" style="top:${today.getHours()*60+today.getMinutes()}px"></div>` : ''}
+        </div>
+      </div>
+    </div>`;
+
+  requestAnimationFrame(() => {
+    const tl = container.querySelector('.day-timeline');
+    if (tl) tl.scrollTop = 7 * 60;
+  });
+}
+
+// ── AGENDA ──
+function renderAgenda() {
+  const header = document.getElementById('agendaHeader');
+  const body = document.getElementById('agendaBody');
+
+  if (sameDay(selectedDate, today)) {
+    header.textContent = "Today's Agenda";
+  } else {
+    header.textContent = selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  // Show selected day + next 2 days
+  let html = '';
+  for (let offset = 0; offset < 3; offset++) {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + offset);
+    const dayEvents = events.filter(e => sameDay(e.date, d) && isEventVisible(e))
+      .sort((a,b) => (a.startH*60+a.startM) - (b.startH*60+b.startM));
+
+    if (dayEvents.length === 0 && offset > 0) continue;
+
+    let label;
+    if (offset === 0 && sameDay(d, today)) label = 'Today';
+    else if (offset === 1 && sameDay(new Date(today.getFullYear(), today.getMonth(), today.getDate()+1), d)) label = 'Tomorrow';
+    else label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+    html += `<div class="agenda-date-label">${label}</div>`;
+    if (dayEvents.length === 0) {
+      html += `<div style="padding:10px;color:var(--text-faint);font-size:13px">No events</div>`;
+    }
+    dayEvents.forEach(e => {
+      const member = familyMembers.find(f => f.id === e.person);
+      html += `<div class="agenda-item">
+        <div class="agenda-time">${formatTime(e.startH, e.startM)}</div>
+        <div class="agenda-color" style="background:${getColor(e.person)}"></div>
+        <div class="agenda-info">
+          <div class="agenda-title">${e.title}</div>
+          <div class="agenda-meta">${member ? member.name : ''} · ${formatTime(e.startH,e.startM)}–${formatTime(e.endH,e.endM)}</div>
+        </div>
+      </div>`;
+    });
+  }
+  body.innerHTML = html;
+}
+
+// ── VIEW MANAGEMENT ──
+function setView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  document.getElementById('monthView').style.display = view === 'month' ? 'flex' : 'none';
+  document.getElementById('weekView').style.display = view === 'week' ? 'flex' : 'none';
+  document.getElementById('weekView').classList.toggle('active', view === 'week');
+  document.getElementById('dayView').style.display = view === 'day' ? 'flex' : 'none';
+  document.getElementById('dayView').classList.toggle('active', view === 'day');
+  renderCurrentView();
+}
+
+function renderCurrentView() {
+  if (currentView === 'month') renderMonthView();
+  else if (currentView === 'week') renderWeekView();
+  else if (currentView === 'day') renderDayView();
+  renderAgenda();
+}
+
+function selectDate(y, m, d) {
+  selectedDate = new Date(y, m, d);
+  renderCurrentView();
+}
+
+function changeMonth(dir) {
+  if (currentView === 'month') {
+    currentDate.setMonth(currentDate.getMonth() + dir);
+  } else if (currentView === 'week') {
+    selectedDate.setDate(selectedDate.getDate() + dir * 7);
+    currentDate = new Date(selectedDate);
+  } else {
+    selectedDate.setDate(selectedDate.getDate() + dir);
+    currentDate = new Date(selectedDate);
+  }
+  renderCurrentView();
+}
+
+function goToday() {
+  currentDate = new Date(today);
+  selectedDate = new Date(today);
+  renderCurrentView();
+}
+
+// ── MODAL ──
+function openModal() {
+  document.getElementById('modalOverlay').classList.add('open');
+  document.getElementById('eventDate').value = selectedDate.toISOString().split('T')[0];
+  document.getElementById('eventTitle').value = '';
+  setTimeout(() => document.getElementById('eventTitle').focus(), 200);
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modalOverlay')) return;
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+function saveEvent() {
+  const title = document.getElementById('eventTitle').value.trim();
+  if (!title) return;
+  const dateVal = document.getElementById('eventDate').value;
+  const person = document.getElementById('eventPerson').value;
+  const calType = document.getElementById('eventCalType').value;
+  const start = document.getElementById('eventStart').value.split(':');
+  const end = document.getElementById('eventEnd').value.split(':');
+  const [sy, sm, sd] = dateVal.split('-').map(Number);
+
+  events.push({
+    id: `custom_${Date.now()}`,
+    title,
+    date: new Date(sy, sm - 1, sd),
+    startH: parseInt(start[0]),
+    startM: parseInt(start[1]),
+    endH: parseInt(end[0]),
+    endM: parseInt(end[1]),
+    person,
+    type: calType,
+  });
+
+  closeModal();
+  renderCurrentView();
+}
+
+// ── CLOCK ──
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+// ── INIT ──
+renderSidebar();
+renderCurrentView();
+updateClock();
+setInterval(updateClock, 30000);
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (document.getElementById('modalOverlay').classList.contains('open')) {
+    if (e.key === 'Escape') closeModal();
+    return;
+  }
+  if (e.key === 'ArrowLeft') changeMonth(-1);
+  if (e.key === 'ArrowRight') changeMonth(1);
+  if (e.key === 't' || e.key === 'T') goToday();
+  if (e.key === 'n' || e.key === 'N') openModal();
+  if (e.key === '1') setView('month');
+  if (e.key === '2') setView('week');
+  if (e.key === '3') setView('day');
+});
+</script>
+</body>
+</html>
