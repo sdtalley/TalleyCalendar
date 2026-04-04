@@ -19,10 +19,25 @@ export default function SettingsPage() {
   const [weatherLat, setWeatherLat] = useState('')
   const [weatherLon, setWeatherLon] = useState('')
   const [weatherLabel, setWeatherLabel] = useState('')
+  const [pinLocked, setPinLocked] = useState(false)
+  const [pinInput, setPinInput] = useState('')
+  const [pinError, setPinError] = useState(false)
+  const [currentPin, setCurrentPin] = useState('')
+  const [newPin, setNewPin] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [addAccountMemberId, setAddAccountMemberId] = useState<string | null>(null)
   const router = useRouter()
+
+  // Check if PIN is required
+  useEffect(() => {
+    fetch('/api/settings/verify-pin')
+      .then(r => r.json())
+      .then(data => {
+        if (data.required) setPinLocked(true)
+      })
+      .catch(() => {})
+  }, [])
 
   // Check for OAuth success/error in URL params
   useEffect(() => {
@@ -62,6 +77,7 @@ export default function SettingsPage() {
           setWeatherLon(settings.weather.longitude ? String(settings.weather.longitude) : '')
           setWeatherLabel(settings.weather.label || '')
         }
+        setCurrentPin(settings.settingsPin || '')
       }
       setError(null)
     } catch {
@@ -130,10 +146,78 @@ export default function SettingsPage() {
     if (res.ok) await fetchData()
   }
 
+  async function handlePinSubmit() {
+    const res = await fetch('/api/settings/verify-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: pinInput }),
+    })
+    const data = await res.json()
+    if (data.valid) {
+      setPinLocked(false)
+      setPinError(false)
+    } else {
+      setPinError(true)
+      setPinInput('')
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen" style={{ background: 'var(--bg)' }}>
         <div className="text-lg" style={{ color: 'var(--text-dim)' }}>Loading settings...</div>
+      </div>
+    )
+  }
+
+  // PIN gate
+  if (pinLocked) {
+    return (
+      <div className="flex items-center justify-center h-screen" style={{ background: 'var(--bg)' }}>
+        <div
+          className="w-[340px] rounded-2xl p-8 flex flex-col items-center gap-4"
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+        >
+          <div className="text-lg font-bold" style={{ color: 'var(--text)' }}>
+            Enter Settings PIN
+          </div>
+          <p className="text-sm text-center" style={{ color: 'var(--text-dim)' }}>
+            Settings are PIN-protected to prevent accidental changes.
+          </p>
+          <input
+            type="password"
+            inputMode="numeric"
+            maxLength={8}
+            placeholder="PIN"
+            value={pinInput}
+            onChange={e => {
+              setPinInput(e.target.value.replace(/\D/g, ''))
+              setPinError(false)
+            }}
+            onKeyDown={e => e.key === 'Enter' && handlePinSubmit()}
+            className="text-center text-2xl tracking-[0.3em] w-full"
+            autoFocus
+            style={pinError ? { borderColor: '#ff6b6b' } : undefined}
+          />
+          {pinError && (
+            <div className="text-sm" style={{ color: '#ff6b6b' }}>Incorrect PIN</div>
+          )}
+          <div className="flex gap-3 w-full">
+            <Link
+              href="/"
+              className="flex-1 text-center px-4 py-2.5 rounded-[8px] text-sm font-medium no-underline transition-all duration-150"
+              style={{ background: 'var(--surface2)', color: 'var(--text-dim)', border: '1px solid var(--border)' }}
+            >
+              Cancel
+            </Link>
+            <button
+              onClick={handlePinSubmit}
+              className="flex-1 settings-btn-primary"
+            >
+              Unlock
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -368,6 +452,96 @@ export default function SettingsPage() {
             </div>
           )}
 
+        </section>
+
+        {/* Settings PIN Section */}
+        <section
+          className="rounded-2xl p-6"
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+        >
+          <h2 className="text-lg font-bold mb-1" style={{ color: 'var(--text)' }}>
+            Settings PIN
+          </h2>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-dim)' }}>
+            Require a PIN to access Settings (prevents accidental changes on kiosk displays).
+          </p>
+
+          {currentPin ? (
+            <div className="flex flex-col gap-3">
+              <div className="text-sm" style={{ color: 'var(--text)' }}>
+                PIN is currently <strong>enabled</strong>.
+              </div>
+              <div className="flex gap-3">
+                <div className="flex flex-col gap-1.5 flex-1">
+                  <label className="field-label">New PIN (or leave blank to remove)</label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={8}
+                    placeholder="New PIN"
+                    value={newPin}
+                    onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    const res = await fetch('/api/settings', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ settingsPin: newPin }),
+                    })
+                    if (res.ok) {
+                      setCurrentPin(newPin)
+                      setNewPin('')
+                      setError(null)
+                    }
+                  }}
+                  className="settings-btn-primary"
+                >
+                  {newPin ? 'Update PIN' : 'Remove PIN'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-3">
+                <div className="flex flex-col gap-1.5 flex-1">
+                  <label className="field-label">Set a PIN (numbers only)</label>
+                  <input
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={8}
+                    placeholder="e.g. 1234"
+                    value={newPin}
+                    onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    if (!newPin) return
+                    const res = await fetch('/api/settings', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ settingsPin: newPin }),
+                    })
+                    if (res.ok) {
+                      setCurrentPin(newPin)
+                      setNewPin('')
+                      setError(null)
+                    }
+                  }}
+                  className="settings-btn-primary"
+                  disabled={!newPin}
+                >
+                  Enable PIN
+                </button>
+              </div>
+            </div>
+          )}
         </section>
       </div>
 

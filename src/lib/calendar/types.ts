@@ -85,6 +85,7 @@ export interface AppSettings {
     longitude: number
     label: string               // city name for display
   }
+  settingsPin: string           // 4-digit PIN to protect settings, empty = disabled
 }
 
 // ── UI types ───────────────────────────────────────────────────────────────

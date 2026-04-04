@@ -134,6 +134,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultView: 'month' as CalendarView,
   dimSchedule: { start: '22:00', end: '06:00' },
   weather: { enabled: false, latitude: 0, longitude: 0, label: '' },
+  settingsPin: '',
 }
 
 export async function getSettings(): Promise<AppSettings> {
