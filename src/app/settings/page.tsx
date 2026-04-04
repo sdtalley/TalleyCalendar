@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { FamilyMember, ConnectedAccount } from '@/lib/calendar/types'
 import { FamilyMemberList } from '@/components/settings/FamilyMemberList'
@@ -15,6 +16,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [addAccountMemberId, setAddAccountMemberId] = useState<string | null>(null)
+  const router = useRouter()
 
   // Check for OAuth success/error in URL params
   useEffect(() => {
@@ -135,6 +137,16 @@ export default function SettingsPage() {
           </Link>
           <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>Settings</h1>
         </div>
+        <button
+          onClick={async () => {
+            await fetch('/api/auth/logout', { method: 'POST' })
+            router.push('/login')
+          }}
+          className="settings-btn-ghost"
+          style={{ color: 'var(--text-faint)' }}
+        >
+          Sign Out
+        </button>
       </header>
 
       {/* Error banner */}
