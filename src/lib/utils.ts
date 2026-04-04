@@ -59,6 +59,17 @@ export function hexToRgba(hex: string, opacity: number): string {
   return `rgba(${r},${g},${b},${opacity})`
 }
 
+/** Returns true if an event overlaps with a given calendar day */
+export function eventSpansDay(
+  eventStart: Date,
+  eventEnd: Date,
+  day: Date
+): boolean {
+  const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate())
+  const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1)
+  return eventStart < dayEnd && eventEnd > dayStart
+}
+
 /** Add `minutes` to a Date and return a new Date */
 export function addMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60_000)

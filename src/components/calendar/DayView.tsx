@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { sameDay, formatTime, formatDateShort, hexToRgba } from '@/lib/utils'
+import { sameDay, eventSpansDay, formatTime, formatDateShort, hexToRgba } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
@@ -16,9 +16,16 @@ interface DayViewProps {
 export function DayView({ currentDate, events, onEventClick }: DayViewProps) {
   const today = new Date()
   const bodyRef = useRef<HTMLDivElement>(null)
-  const dayEvents = events.filter(e => sameDay(e.start, currentDate))
-  const nowMinutes = today.getHours() * 60 + today.getMinutes()
   const isToday = sameDay(currentDate, today)
+  const nowMinutes = today.getHours() * 60 + today.getMinutes()
+
+  // Split events
+  const allDayEvents = events.filter(
+    e => (e.allDay || !sameDay(e.start, e.end)) && eventSpansDay(e.start, e.end, currentDate)
+  )
+  const timedEvents = events.filter(
+    e => !e.allDay && sameDay(e.start, e.end) && sameDay(e.start, currentDate)
+  )
 
   useEffect(() => {
     if (bodyRef.current) {
@@ -42,6 +49,36 @@ export function DayView({ currentDate, events, onEventClick }: DayViewProps) {
           )}
         </div>
       </div>
+
+      {/* All-day section */}
+      {allDayEvents.length > 0 && (
+        <div
+          className="flex-shrink-0 px-6 py-2 flex flex-wrap gap-2"
+          style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
+        >
+          <span
+            className="font-mono text-[11px] self-center mr-1"
+            style={{ color: 'var(--text-faint)' }}
+          >
+            all day
+          </span>
+          {allDayEvents.map(ev => (
+            <button
+              key={ev.id}
+              onClick={() => onEventClick(ev)}
+              className="text-[12px] px-2.5 py-1 rounded-md font-medium border-none cursor-pointer transition-all duration-100"
+              style={{
+                background: hexToRgba(ev.color, 0.25),
+                color: ev.color,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.15)')}
+              onMouseLeave={e => (e.currentTarget.style.filter = '')}
+            >
+              {ev.title}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Timeline */}
       <div
@@ -81,7 +118,7 @@ export function DayView({ currentDate, events, onEventClick }: DayViewProps) {
             />
           ))}
 
-          {dayEvents.map(ev => {
+          {timedEvents.map(ev => {
             const startMin = ev.start.getHours() * 60 + ev.start.getMinutes()
             const endMin = ev.end.getHours() * 60 + ev.end.getMinutes()
             const top = (startMin / 60) * HOUR_HEIGHT

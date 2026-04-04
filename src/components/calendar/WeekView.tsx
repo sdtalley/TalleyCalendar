@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { getWeekDates, sameDay, formatTime, hexToRgba } from '@/lib/utils'
+import { getWeekDates, sameDay, eventSpansDay, formatTime, hexToRgba } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
@@ -17,6 +17,16 @@ export function WeekView({ currentDate, events, onEventClick }: WeekViewProps) {
   const today = new Date()
   const weekDates = getWeekDates(currentDate)
   const bodyRef = useRef<HTMLDivElement>(null)
+
+  // Split events: all-day/multi-day vs timed
+  const allDayEvents = events.filter(e => e.allDay || !sameDay(e.start, e.end))
+  const timedEvents = events.filter(e => !e.allDay && sameDay(e.start, e.end))
+
+  // Group all-day events per day for the week
+  const allDayByDay = weekDates.map(day =>
+    allDayEvents.filter(e => eventSpansDay(e.start, e.end, day))
+  )
+  const maxAllDay = Math.max(0, ...allDayByDay.map(d => d.length))
 
   // Scroll to 7am on mount
   useEffect(() => {
@@ -55,6 +65,48 @@ export function WeekView({ currentDate, events, onEventClick }: WeekViewProps) {
         })}
       </div>
 
+      {/* All-day section */}
+      {maxAllDay > 0 && (
+        <div
+          className="flex-shrink-0 grid"
+          style={{
+            gridTemplateColumns: `60px repeat(7, 1fr)`,
+            borderBottom: '1px solid var(--border)',
+            background: 'var(--surface)',
+          }}
+        >
+          <div
+            className="font-mono text-[10px] text-right pr-2 flex items-center justify-end"
+            style={{ color: 'var(--text-faint)' }}
+          >
+            all day
+          </div>
+          {weekDates.map((day, di) => (
+            <div
+              key={di}
+              className="flex flex-col gap-[2px] py-1 px-[2px]"
+              style={{ borderLeft: '1px solid var(--border)', minHeight: 28 }}
+            >
+              {allDayByDay[di].map(ev => (
+                <button
+                  key={ev.id}
+                  onClick={() => onEventClick(ev)}
+                  className="text-[10px] px-1.5 py-[1px] rounded font-medium truncate w-full border-none cursor-pointer text-left transition-all duration-100"
+                  style={{
+                    background: hexToRgba(ev.color, 0.3),
+                    color: ev.color,
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.2)')}
+                  onMouseLeave={e => (e.currentTarget.style.filter = '')}
+                >
+                  {ev.title}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Scrollable body */}
       <div
         ref={bodyRef}
@@ -84,7 +136,7 @@ export function WeekView({ currentDate, events, onEventClick }: WeekViewProps) {
 
         {/* Day columns */}
         {weekDates.map((day, di) => {
-          const dayEvents = events.filter(e => sameDay(e.start, day))
+          const dayEvents = timedEvents.filter(e => sameDay(e.start, day))
           const nowMinutes = today.getHours() * 60 + today.getMinutes()
 
           return (

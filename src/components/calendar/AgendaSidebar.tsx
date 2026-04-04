@@ -1,6 +1,6 @@
 'use client'
 
-import { sameDay, formatTime, formatDateShort } from '@/lib/utils'
+import { sameDay, eventSpansDay, formatTime, formatDateShort } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
 interface AgendaSidebarProps {
@@ -24,8 +24,12 @@ export function AgendaSidebar({ selectedDate, events, onEventClick }: AgendaSide
     .map(d => ({
       date: d,
       events: events
-        .filter(e => sameDay(e.start, d))
-        .sort((a, b) => a.start.getTime() - b.start.getTime()),
+        .filter(e => eventSpansDay(e.start, e.end, d))
+        .sort((a, b) => {
+          // All-day events first, then by start time
+          if (a.allDay !== b.allDay) return a.allDay ? -1 : 1
+          return a.start.getTime() - b.start.getTime()
+        }),
     }))
     .filter(g => g.events.length > 0)
 

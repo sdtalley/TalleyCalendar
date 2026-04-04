@@ -1,6 +1,6 @@
 'use client'
 
-import { getMonthGridDates, sameDay, hexToRgba } from '@/lib/utils'
+import { getMonthGridDates, sameDay, eventSpansDay, hexToRgba } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -49,7 +49,15 @@ export function MonthView({
           const isOtherMonth = date.getMonth() !== month
           const isToday = sameDay(date, today)
           const isSelected = sameDay(date, selectedDate)
-          const dayEvents = events.filter(e => sameDay(e.start, date))
+
+          // Split into all-day/multi-day vs timed events
+          const dayAllDay = events.filter(
+            e => (e.allDay || !sameDay(e.start, e.end)) && eventSpansDay(e.start, e.end, date)
+          )
+          const dayTimed = events.filter(
+            e => !e.allDay && sameDay(e.start, e.end) && sameDay(e.start, date)
+          )
+          const dayEvents = [...dayAllDay, ...dayTimed]
           const maxShow = 3
 
           return (
@@ -94,25 +102,36 @@ export function MonthView({
 
               {/* Events */}
               <div className="flex flex-col gap-[2px] mt-[2px] overflow-hidden flex-1">
-                {dayEvents.slice(0, maxShow).map(ev => (
-                  <button
-                    key={ev.id}
-                    onClick={e => {
-                      e.stopPropagation()
-                      onEventClick(ev)
-                    }}
-                    className="text-[11px] px-1.5 py-[2px] rounded text-left font-medium leading-[1.5] truncate w-full border-none cursor-pointer transition-all duration-100"
-                    style={{
-                      background: hexToRgba(ev.color, 0.13),
-                      color: ev.color,
-                      borderLeft: `3px solid ${ev.color}`,
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.2)')}
-                    onMouseLeave={e => (e.currentTarget.style.filter = '')}
-                  >
-                    {ev.title}
-                  </button>
-                ))}
+                {dayEvents.slice(0, maxShow).map(ev => {
+                  const isAllDayStyle = ev.allDay || !sameDay(ev.start, ev.end)
+                  return (
+                    <button
+                      key={ev.id}
+                      onClick={e => {
+                        e.stopPropagation()
+                        onEventClick(ev)
+                      }}
+                      className="text-[11px] px-1.5 py-[2px] rounded text-left font-medium leading-[1.5] truncate w-full border-none cursor-pointer transition-all duration-100"
+                      style={
+                        isAllDayStyle
+                          ? {
+                              background: hexToRgba(ev.color, 0.3),
+                              color: ev.color,
+                              borderRadius: '3px',
+                            }
+                          : {
+                              background: hexToRgba(ev.color, 0.13),
+                              color: ev.color,
+                              borderLeft: `3px solid ${ev.color}`,
+                            }
+                      }
+                      onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.2)')}
+                      onMouseLeave={e => (e.currentTarget.style.filter = '')}
+                    >
+                      {ev.title}
+                    </button>
+                  )
+                })}
                 {dayEvents.length > maxShow && (
                   <div
                     className="text-[10px] font-semibold px-1.5"
