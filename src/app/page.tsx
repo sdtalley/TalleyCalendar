@@ -31,7 +31,6 @@ export default function CalendarPage() {
     ? [...liveEvents, ...localEvents]
     : [...sampleEvents, ...localEvents]
 
-  // Build UI members: use live members from Redis if available, else sample
   const uiMembers: FamilyMemberUI[] = hasRealSetup
     ? liveMembers.map(m => ({ ...m, enabled: true }))
     : DEFAULT_FAMILY_MEMBERS
@@ -103,6 +102,26 @@ export default function CalendarPage() {
     // TODO: event detail view
   }
 
+  // Full-page loading state — no sample data flash
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
+        <TopBar
+          currentDate={currentDate}
+          view={view}
+          onPrev={goPrev}
+          onNext={goNext}
+          onToday={goToday}
+          onViewChange={changeView}
+          onAddEvent={handleAddEvent}
+        />
+        <div className="flex items-center justify-center flex-1" style={{ color: 'var(--text-dim)' }}>
+          Loading calendar...
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       <TopBar
@@ -133,36 +152,28 @@ export default function CalendarPage() {
         />
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {loading && !hasRealSetup ? (
-            <div className="flex items-center justify-center flex-1" style={{ color: 'var(--text-dim)' }}>
-              Loading calendar...
-            </div>
-          ) : (
-            <>
-              {view === 'month' && (
-                <MonthView
-                  currentDate={currentDate}
-                  selectedDate={selectedDate}
-                  events={visibleEvents}
-                  onSelectDate={handleSelectDate}
-                  onEventClick={handleEventClick}
-                />
-              )}
-              {view === 'week' && (
-                <WeekView
-                  currentDate={currentDate}
-                  events={visibleEvents}
-                  onEventClick={handleEventClick}
-                />
-              )}
-              {view === 'day' && (
-                <DayView
-                  currentDate={currentDate}
-                  events={visibleEvents}
-                  onEventClick={handleEventClick}
-                />
-              )}
-            </>
+          {view === 'month' && (
+            <MonthView
+              currentDate={currentDate}
+              selectedDate={selectedDate}
+              events={visibleEvents}
+              onSelectDate={handleSelectDate}
+              onEventClick={handleEventClick}
+            />
+          )}
+          {view === 'week' && (
+            <WeekView
+              currentDate={currentDate}
+              events={visibleEvents}
+              onEventClick={handleEventClick}
+            />
+          )}
+          {view === 'day' && (
+            <DayView
+              currentDate={currentDate}
+              events={visibleEvents}
+              onEventClick={handleEventClick}
+            />
           )}
         </div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import type { CalendarEvent, FamilyMemberUI } from '@/lib/calendar/types'
 
 export const DEFAULT_CAL_TYPES = [
@@ -12,33 +12,25 @@ export const DEFAULT_CAL_TYPES = [
 
 export function useEventFilters(
   allEvents: CalendarEvent[],
-  initialMembers: FamilyMemberUI[]
+  members: FamilyMemberUI[]
 ) {
-  const [familyMembers, setFamilyMembers] = useState<FamilyMemberUI[]>(initialMembers)
+  // Only store toggle overrides — the member list itself comes from props
+  const [disabledMembers, setDisabledMembers] = useState<Set<string>>(new Set())
   const [calTypes, setCalTypes] = useState(DEFAULT_CAL_TYPES)
 
-  // Track previous member IDs to detect when the source list changes
-  const prevMemberIdsRef = useRef<string>('')
-
-  useEffect(() => {
-    const newIds = initialMembers.map(m => m.id).sort().join(',')
-    if (newIds !== prevMemberIdsRef.current) {
-      prevMemberIdsRef.current = newIds
-      // Merge: keep toggle state for existing members, add new ones as enabled
-      setFamilyMembers(prev => {
-        const toggleState = new Map(prev.map(m => [m.id, m.enabled]))
-        return initialMembers.map(m => ({
-          ...m,
-          enabled: toggleState.get(m.id) ?? true,
-        }))
-      })
-    }
-  }, [initialMembers])
+  // Derive familyMembers from props + toggle state on every render (no lag)
+  const familyMembers: FamilyMemberUI[] = useMemo(
+    () => members.map(m => ({ ...m, enabled: !disabledMembers.has(m.id) })),
+    [members, disabledMembers]
+  )
 
   const toggleMember = useCallback((id: string) => {
-    setFamilyMembers(prev =>
-      prev.map(m => (m.id === id ? { ...m, enabled: !m.enabled } : m))
-    )
+    setDisabledMembers(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }, [])
 
   const toggleCalType = useCallback((id: string) => {
