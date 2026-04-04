@@ -12,12 +12,16 @@ import { EventDetailModal } from '@/components/calendar/EventDetailModal'
 import { useCalendarNavigation } from '@/hooks/useCalendarNavigation'
 import { useEventFilters } from '@/hooks/useEventFilters'
 import { useCalendarEvents } from '@/hooks/useCalendarEvents'
+import { useScreenDim } from '@/hooks/useScreenDim'
 import { generateSampleEvents, DEFAULT_FAMILY_MEMBERS } from '@/lib/sampleData'
 import type { CalendarEvent, FamilyMemberUI, NewEventDraft } from '@/lib/calendar/types'
 
 export default function CalendarPage() {
   const { currentDate, selectedDate, view, goToday, goPrev, goNext, selectDate, changeView } =
     useCalendarNavigation()
+
+  // Screen dimming for kiosk mode
+  useScreenDim()
 
   // Fetch real events from connected accounts
   const { events: liveEvents, members: liveMembers, loading, error: calError } = useCalendarEvents()

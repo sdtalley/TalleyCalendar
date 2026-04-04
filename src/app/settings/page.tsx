@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import type { FamilyMember, ConnectedAccount } from '@/lib/calendar/types'
+import type { FamilyMember, ConnectedAccount, AppSettings } from '@/lib/calendar/types'
 import { FamilyMemberList } from '@/components/settings/FamilyMemberList'
 import { AccountList } from '@/components/settings/AccountList'
 import { AddAccountFlow } from '@/components/settings/AddAccountFlow'
@@ -13,6 +13,8 @@ type AccountSafe = Omit<ConnectedAccount, 'auth'> & { authType: string }
 export default function SettingsPage() {
   const [members, setMembers] = useState<FamilyMember[]>([])
   const [accounts, setAccounts] = useState<AccountSafe[]>([])
+  const [dimStart, setDimStart] = useState('22:00')
+  const [dimEnd, setDimEnd] = useState('06:00')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [addAccountMemberId, setAddAccountMemberId] = useState<string | null>(null)
@@ -35,9 +37,10 @@ export default function SettingsPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [membersRes, accountsRes] = await Promise.all([
+      const [membersRes, accountsRes, settingsRes] = await Promise.all([
         fetch('/api/family'),
         fetch('/api/accounts'),
+        fetch('/api/settings'),
       ])
       if (!membersRes.ok || !accountsRes.ok) {
         setError('Failed to load settings. Check that Redis is configured.')
@@ -45,6 +48,11 @@ export default function SettingsPage() {
       }
       setMembers(await membersRes.json())
       setAccounts(await accountsRes.json())
+      if (settingsRes.ok) {
+        const settings: AppSettings = await settingsRes.json()
+        setDimStart(settings.dimSchedule.start)
+        setDimEnd(settings.dimSchedule.end)
+      }
       setError(null)
     } catch {
       setError('Failed to connect to the server.')
@@ -195,6 +203,52 @@ export default function SettingsPage() {
             onRemoveAccount={handleRemoveAccount}
             onToggleCalendar={handleToggleCalendar}
           />
+        </section>
+
+        {/* Screen Dimming Section */}
+        <section
+          className="rounded-2xl p-6"
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+        >
+          <h2 className="text-lg font-bold mb-1" style={{ color: 'var(--text)' }}>
+            Screen Dimming
+          </h2>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-dim)' }}>
+            Automatically dim the display during nighttime hours (for kiosk/tablet use).
+          </p>
+          <div className="flex gap-4 items-end">
+            <div className="flex flex-col gap-1.5 flex-1">
+              <label className="field-label">Dim at</label>
+              <input
+                type="time"
+                value={dimStart}
+                onChange={e => setDimStart(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5 flex-1">
+              <label className="field-label">Brighten at</label>
+              <input
+                type="time"
+                value={dimEnd}
+                onChange={e => setDimEnd(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={async () => {
+                const res = await fetch('/api/settings', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ dimSchedule: { start: dimStart, end: dimEnd } }),
+                })
+                if (res.ok) setError(null)
+                else setError('Failed to save dim schedule.')
+              }}
+              className="settings-btn-primary"
+              style={{ marginBottom: 2 }}
+            >
+              Save
+            </button>
+          </div>
         </section>
       </div>
 
