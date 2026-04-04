@@ -8,6 +8,7 @@ import { WeekView } from '@/components/calendar/WeekView'
 import { DayView } from '@/components/calendar/DayView'
 import { AgendaSidebar } from '@/components/calendar/AgendaSidebar'
 import { EventModal } from '@/components/calendar/EventModal'
+import { EventDetailModal } from '@/components/calendar/EventDetailModal'
 import { useCalendarNavigation } from '@/hooks/useCalendarNavigation'
 import { useEventFilters } from '@/hooks/useEventFilters'
 import { useCalendarEvents } from '@/hooks/useCalendarEvents'
@@ -40,6 +41,7 @@ export default function CalendarPage() {
 
   const [modalOpen, setModalOpen] = useState(false)
   const [modalInitialDate, setModalInitialDate] = useState<Date | undefined>()
+  const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null)
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -98,8 +100,8 @@ export default function CalendarPage() {
     setLocalEvents(prev => [...prev, newEvent])
   }
 
-  function handleEventClick(_event: CalendarEvent) {
-    // TODO: event detail view
+  function handleEventClick(event: CalendarEvent) {
+    setDetailEvent(event)
   }
 
   // Full-page loading state — no sample data flash
@@ -190,6 +192,12 @@ export default function CalendarPage() {
         familyMembers={familyMembers}
         onClose={() => setModalOpen(false)}
         onSave={handleSaveEvent}
+      />
+
+      <EventDetailModal
+        event={detailEvent}
+        familyMembers={familyMembers}
+        onClose={() => setDetailEvent(null)}
       />
     </div>
   )
