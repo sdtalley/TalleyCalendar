@@ -1,19 +1,24 @@
 'use client'
 
 import type { FamilyMemberUI } from '@/lib/calendar/types'
+import { MiniCalendar } from '@/components/calendar/MiniCalendar'
 
 interface SidebarProps {
   familyMembers: FamilyMemberUI[]
   calTypes: { id: string; name: string; enabled: boolean }[]
+  selectedDate: Date
   onToggleMember: (id: string) => void
   onToggleCalType: (id: string) => void
+  onSelectDate: (date: Date) => void
 }
 
 export function Sidebar({
   familyMembers,
   calTypes,
+  selectedDate,
   onToggleMember,
   onToggleCalType,
+  onSelectDate,
 }: SidebarProps) {
   return (
     <aside
@@ -24,6 +29,14 @@ export function Sidebar({
         borderRight: '1px solid var(--border)',
       }}
     >
+      {/* Mini Calendar */}
+      <div
+        className="pb-3 mb-1"
+        style={{ borderBottom: '1px solid var(--border)' }}
+      >
+        <MiniCalendar selectedDate={selectedDate} onSelectDate={onSelectDate} />
+      </div>
+
       {/* Family */}
       <div>
         <div className="section-title">Family</div>

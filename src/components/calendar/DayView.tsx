@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { sameDay, eventSpansDay, formatTime, formatDateShort, hexToRgba } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
@@ -11,13 +11,24 @@ interface DayViewProps {
   currentDate: Date
   events: CalendarEvent[]
   onEventClick: (event: CalendarEvent) => void
+  onDragCreate?: (date: Date, startMinutes: number, endMinutes: number) => void
 }
 
-export function DayView({ currentDate, events, onEventClick }: DayViewProps) {
+function snapToQuarter(minutes: number): number {
+  return Math.round(minutes / 15) * 15
+}
+
+export function DayView({ currentDate, events, onEventClick, onDragCreate }: DayViewProps) {
   const today = new Date()
   const bodyRef = useRef<HTMLDivElement>(null)
+  const columnRef = useRef<HTMLDivElement>(null)
   const isToday = sameDay(currentDate, today)
   const nowMinutes = today.getHours() * 60 + today.getMinutes()
+
+  // Drag-to-create state
+  const [dragStart, setDragStart] = useState<number | null>(null)
+  const [dragEnd, setDragEnd] = useState<number | null>(null)
+  const dragging = useRef(false)
 
   // Split events
   const allDayEvents = events.filter(
@@ -32,6 +43,60 @@ export function DayView({ currentDate, events, onEventClick }: DayViewProps) {
       bodyRef.current.scrollTop = 7 * HOUR_HEIGHT
     }
   }, [])
+
+  const getMinutesFromY = useCallback((clientY: number): number => {
+    if (!columnRef.current) return 0
+    const rect = columnRef.current.getBoundingClientRect()
+    const scrollTop = bodyRef.current?.scrollTop ?? 0
+    const y = clientY - rect.top + scrollTop
+    const minutes = (y / (24 * HOUR_HEIGHT)) * 24 * 60
+    return Math.max(0, Math.min(24 * 60, snapToQuarter(minutes)))
+  }, [])
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return
+    dragging.current = true
+    const min = getMinutesFromY(e.clientY)
+    setDragStart(min)
+    setDragEnd(min + 30)
+  }, [getMinutesFromY])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragging.current || dragStart === null) return
+    setDragEnd(getMinutesFromY(e.clientY))
+  }, [dragStart, getMinutesFromY])
+
+  const handleMouseUp = useCallback(() => {
+    if (!dragging.current || dragStart === null || dragEnd === null) {
+      dragging.current = false
+      return
+    }
+    dragging.current = false
+    const start = Math.min(dragStart, dragEnd)
+    const end = Math.max(dragStart, dragEnd)
+    if (end - start >= 15 && onDragCreate) {
+      onDragCreate(currentDate, start, end)
+    }
+    setDragStart(null)
+    setDragEnd(null)
+  }, [dragStart, dragEnd, currentDate, onDragCreate])
+
+  // Clean up drag on mouse leave
+  const handleMouseLeave = useCallback(() => {
+    if (dragging.current) {
+      dragging.current = false
+      setDragStart(null)
+      setDragEnd(null)
+    }
+  }, [])
+
+  // Preview rectangle
+  const previewTop = dragStart !== null && dragEnd !== null
+    ? (Math.min(dragStart, dragEnd) / 60) * HOUR_HEIGHT
+    : 0
+  const previewHeight = dragStart !== null && dragEnd !== null
+    ? (Math.abs(dragEnd - dragStart) / 60) * HOUR_HEIGHT
+    : 0
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -108,8 +173,13 @@ export function DayView({ currentDate, events, onEventClick }: DayViewProps) {
 
         {/* Events column */}
         <div
-          className="relative"
-          style={{ borderLeft: '1px solid var(--border)' }}
+          ref={columnRef}
+          className="relative select-none"
+          style={{ borderLeft: '1px solid var(--border)', cursor: 'crosshair' }}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
         >
           {HOURS.map(h => (
             <div
@@ -117,6 +187,20 @@ export function DayView({ currentDate, events, onEventClick }: DayViewProps) {
               style={{ height: HOUR_HEIGHT, borderBottom: '1px solid var(--border)' }}
             />
           ))}
+
+          {/* Drag preview */}
+          {dragStart !== null && dragEnd !== null && previewHeight > 0 && (
+            <div
+              className="absolute left-1 right-4 rounded-lg pointer-events-none"
+              style={{
+                top: previewTop,
+                height: previewHeight,
+                background: 'rgba(108,140,255,0.15)',
+                border: '2px dashed var(--accent)',
+                zIndex: 5,
+              }}
+            />
+          )}
 
           {timedEvents.map(ev => {
             const startMin = ev.start.getHours() * 60 + ev.start.getMinutes()

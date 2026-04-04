@@ -3,6 +3,7 @@ import { getAllAccounts, getFamilyMembers } from '@/lib/redis'
 import { fetchGoogleEvents } from '@/lib/calendar/google'
 import { fetchOutlookEvents } from '@/lib/calendar/outlook'
 import { fetchAppleEvents } from '@/lib/calendar/apple'
+import { expandRecurringEvents } from '@/lib/calendar/recurrence'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
 // GET /api/calendars?start=ISO&end=ISO
@@ -69,17 +70,20 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Expand recurring events into individual instances
+  const expandedEvents = expandRecurringEvents(allEvents, timeMin, timeMax)
+
   // Sort by start time
-  allEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+  expandedEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
 
   return NextResponse.json({
-    events: allEvents,
+    events: expandedEvents,
     errors: errors.length > 0 ? errors : undefined,
     _debug: {
       totalAccounts: accounts.length,
       connectedAccounts: connectedAccounts.length,
       totalMembers: members.length,
-      totalEvents: allEvents.length,
+      totalEvents: expandedEvents.length,
     },
   })
 }

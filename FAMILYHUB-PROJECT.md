@@ -34,12 +34,12 @@ Current off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too 
 │  ┌──────────────┐    ┌────────────────────────┐  │
 │  │  Static Site  │    │   Serverless Functions  │  │
 │  │  (Next.js /   │◄──►│                        │  │
-│  │   React App)  │    │  /api/google-calendar   │  │
-│  │               │    │  /api/apple-calendar    │  │
-│  │  Month View   │    │  /api/outlook-calendar  │  │
-│  │  Week View    │    │  /api/events (CRUD)     │  │
-│  │  Day View     │    │  /api/auth/*            │  │
-│  │  Agenda       │    │                        │  │
+│  │   React App)  │    │  /api/calendars         │  │
+│  │               │    │  /api/accounts          │  │
+│  │  Month View   │    │  /api/family            │  │
+│  │  Week View    │    │  /api/settings          │  │
+│  │  Day View     │    │  /api/weather           │  │
+│  │  Agenda       │    │  /api/auth/*            │  │
 │  └──────────────┘    └────────────────────────┘  │
 │                              │                    │
 │                     ┌────────┴────────┐           │
@@ -47,7 +47,7 @@ Current off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too 
 │                     │  (free tier)    │           │
 │                     │  - OAuth tokens │           │
 │                     │  - User config  │           │
-│                     │  - Cached events│           │
+│                     │  - Settings     │           │
 │                     └─────────────────┘           │
 └─────────────────────────────────────────────────┘
          │                │               │
@@ -87,10 +87,12 @@ Pi 3B/4/5 running:
 | UI | **React + Tailwind CSS** | Rapid iteration, responsive, dark theme |
 | Calendar Lib | **Custom grid components** | Full control over touch interactions and display density |
 | Google Integration | **Google Calendar API v3** | OAuth 2.0, full CRUD |
-| Apple Integration | **CalDAV (via `tsdav` or raw)** | App-specific password auth, read/write |
-| Outlook Integration | **Microsoft Graph API** | OAuth 2.0 via MSAL, full CRUD |
-| Data Store | **Upstash Redis** (`@upstash/redis`) | Token storage, event cache, user preferences — Vercel KV deprecated in 2024 |
-| Auth | **NextAuth.js** | Multi-provider OAuth, session management |
+| Apple Integration | **CalDAV (via `tsdav`)** | App-specific password auth, read |
+| Outlook Integration | **Microsoft Graph API** | OAuth 2.0, full CRUD |
+| Data Store | **Upstash Redis** (`@upstash/redis`) | Token storage, event cache, user preferences |
+| Auth | **Custom HMAC-SHA256 sessions** | Cookie-based login with Edge middleware route protection |
+| OAuth Security | **HMAC-signed state + one-time nonce** | CSRF protection for OAuth flows, nonces stored in Redis with TTL |
+| Weather | **Open-Meteo API** | Free, no API key required, 10-min cache |
 | Deployment | **Vercel (free tier)** | Auto-deploy from GitHub |
 | Version Control | **GitHub** | Source of truth, triggers Vercel deploys |
 
@@ -117,7 +119,7 @@ Pi 3B/4/5 running:
 
 ## Features
 
-### Phase 1 — Core Calendar (MVP)
+### Phase 1 — Core Calendar (MVP) ✅
 
 - [x] Month view with event indicators
 - [x] Week view with time blocks
@@ -127,31 +129,34 @@ Pi 3B/4/5 running:
 - [x] Per-calendar-type filtering (Personal / Work / Kids / Shared)
 - [x] Quick-add event modal (touch-friendly)
 - [x] Live clock display
-- [x] Keyboard shortcuts (arrow keys, T for today, N for new event)
+- [x] Keyboard shortcuts (arrow keys, T for today, N for new event, M/W/D for views)
 - [x] Dark theme optimized for always-on display
-- [x] PWA manifest (installable on phones, add-to-homescreen)
-- [ ] Upstash Redis integration (store family members, accounts, settings)
-- [ ] Settings page — family member management (add/edit/remove, pick color)
-- [ ] Settings page — "Add Calendar Account" flow (pick provider + member)
-- [ ] Google Calendar OAuth flow (connect → discover calendars → pick which to show)
-- [ ] Microsoft Outlook OAuth flow (multitenant: personal + work/Entra accounts)
-- [ ] Apple iCloud CalDAV flow (enter creds in UI → test connection → discover calendars)
-- [ ] Account management (status indicators, toggle, reconnect, remove)
-- [ ] Aggregated event fetching (all connected accounts → unified CalendarEvent list)
-- [ ] Auto-refresh / polling for calendar updates (configurable via Settings)
+- [x] PWA manifest + icons (installable on phones, add-to-homescreen)
+- [x] Upstash Redis integration (family members, accounts, settings)
+- [x] Settings page — family member management (add/edit/remove, pick color)
+- [x] Settings page — "Add Calendar Account" flow (pick provider + member)
+- [x] Google Calendar OAuth flow (connect → discover calendars → pick which to show)
+- [x] Microsoft Outlook OAuth flow (multitenant: personal + work/Entra accounts)
+- [x] Apple iCloud CalDAV flow (enter creds in UI → test connection → discover calendars)
+- [x] Account management (status indicators, toggle, reconnect, remove)
+- [x] Aggregated event fetching (all connected accounts → unified CalendarEvent list)
+- [x] Auto-refresh polling (5-minute interval via useCalendarEvents hook)
+- [x] Login authentication (HMAC-SHA256 signed cookies, Edge middleware)
+- [x] OAuth CSRF protection (HMAC-signed state + one-time Redis nonces)
 
-### Phase 2 — Polish & Usability
+### Phase 2 — Polish & Usability ✅
 
-- [ ] Multi-day / all-day event rendering
-- [ ] Event detail view / edit modal
-- [ ] Drag-to-create events (touch + mouse)
-- [ ] Drag-to-reschedule events
-- [ ] Recurring event display
-- [ ] Search / filter events
-- [ ] Mini calendar in sidebar for quick navigation
-- [ ] Screen dimming schedule (dim at night, bright in morning)
-- [ ] Weather widget in header or sidebar
-- [ ] Today's meal plan or notes section
+- [x] Multi-day / all-day event rendering (banners in month, dedicated sections in week/day)
+- [x] Event detail modal (click any event → full details with source, location, recurrence)
+- [x] Screen dimming schedule (configurable in Settings, default 10pm–6am, CSS brightness)
+- [x] Weather widget (Open-Meteo in TopBar, configurable lat/lon in Settings)
+- [x] Settings PIN protection (numeric PIN gate for kiosk mode)
+- [x] PWA icons (192x192 + 512x512, dark calendar theme)
+- [x] Drag-to-create events (drag on week/day timeline to pre-fill event modal)
+- [x] Recurring event expansion (rrule library expands instances in API response)
+- [x] Search / filter events (search bar in TopBar, / keyboard shortcut)
+- [x] Mini calendar in sidebar for quick date navigation
+- [x] Daily notes / meal plan section (per-day notes in AgendaSidebar, saved to Redis)
 
 ### Phase 3 — Home Assistant Integration
 
@@ -190,6 +195,8 @@ Redis key structure:
   account:{accountId}                → JSON ConnectedAccount object
   accounts:byMember:{memberId}       → JSON array of accountId strings
   settings                           → JSON AppSettings object
+  oauth:nonce:{nonce}                → one-time nonce for OAuth CSRF (10-min TTL)
+  note:{YYYY-MM-DD}                 → string (daily notes / meal plan)
 ```
 
 ```typescript
@@ -201,7 +208,7 @@ interface ConnectedAccount {
   email: string                       // the account email (for display)
   calendarType: CalendarType          // personal | work | kids | shared
 
-  // Provider-specific auth (encrypted at rest in Redis)
+  // Provider-specific auth
   auth:
     | { type: 'oauth'; accessToken: string; refreshToken: string; expiresAt: number }
     | { type: 'caldav'; username: string; appPassword: string }
@@ -229,12 +236,15 @@ interface ConnectedAccount {
 5. **Apple**: Inline form for iCloud email + app-specific password → app tests the CalDAV
    connection → on success, fetches available calendars → user picks which to show
 6. Connected accounts are listed per family member with status indicator, toggle, and remove
+7. **Screen Dimming**: Configure dim/brighten times for kiosk use
+8. **Weather**: Enable/disable, set location coordinates and city label
+9. **Settings PIN**: Set a numeric PIN to protect the Settings page from accidental changes
 
 ### Provider Details
 
 #### Google Calendar
 - **App setup** (one-time, by you): Google Cloud Console → project → enable Calendar API → OAuth 2.0 credentials
-- **Auth flow**: OAuth 2.0 with refresh tokens. State param encodes `memberId` so callback knows who to associate
+- **Auth flow**: OAuth 2.0 with refresh tokens. HMAC-signed state param encodes `memberId` + `calendarType` with one-time nonce for CSRF protection
 - **Scopes**: `calendar.readonly` (read), `calendar.events` (write)
 - **Endpoints**: Google Calendar API v3 — `GET /users/me/calendarList` (discover calendars), `GET /calendars/{id}/events` (fetch events)
 - **Token refresh**: Automatic — refresh token stored in Redis, access token refreshed server-side when expired
@@ -244,9 +254,9 @@ interface ConnectedAccount {
 - **App setup** (one-time, by you): Azure Portal → App Registration
   - **Supported account types: "Accounts in any organizational directory AND personal Microsoft accounts"** (multitenant + personal)
   - This allows both personal Outlook.com accounts AND work/school Entra ID accounts
-- **Auth flow**: OAuth 2.0 via MSAL. State param encodes `memberId`
+- **Auth flow**: OAuth 2.0 via MSAL. HMAC-signed state param with one-time nonce
 - **Scopes**: `Calendars.ReadWrite`, `User.Read`
-- **Endpoints**: Microsoft Graph API — `GET /me/calendars` (discover), `GET /me/calendars/{id}/events` (fetch)
+- **Endpoints**: Microsoft Graph API — `GET /me/calendars` (discover), `GET /me/calendarView` (fetch events in time range)
 - **Work account gotcha**: Some organizations require admin consent for third-party apps. If your Entra tenant blocks it, you (as admin) can grant consent in Azure Portal → Enterprise Applications → your app → Permissions → "Grant admin consent"
 - **Tenant ID**: Use `common` to support all account types
 
@@ -254,7 +264,8 @@ interface ConnectedAccount {
 - **Auth**: No OAuth available. Each user generates an **app-specific password** at appleid.apple.com
 - **Protocol**: CalDAV (WebDAV extension) via `tsdav` library
 - **Server**: `https://caldav.icloud.com`
-- **Flow**: User enters iCloud email + app-specific password in Settings UI → app tests connection server-side → on success, discovers calendars via CalDAV PROPFIND → saves credentials to Redis
+- **Flow**: User enters iCloud email + app-specific password in Settings UI → app tests connection server-side (credentials never sent to client) → on success, discovers calendars via CalDAV PROPFIND → saves credentials to Redis
+- **iCal parsing**: Custom RFC 5545 parser handles line unfolding, VTIMEZONE vs VEVENT scoping, all-day vs timed events, recurrence rules
 - **Multiple users**: Each family member can add their own Apple account (credentials stored per-account in Redis, not in `.env`)
 - **Gotcha**: Credentials can't be validated until we try to connect. The UI must test on save and show clear success/failure. If Apple revokes the app-specific password, the account status changes to `reauth_needed`
 
@@ -263,85 +274,92 @@ interface ConnectedAccount {
 ## Project Structure
 
 ```
-familyhub/
+TalleyCalendar/
 ├── README.md
-├── FAMILYHUB-PROJECT.md          ← this file
+├── FAMILYHUB-PROJECT.md              ← this file (master spec)
+├── NEXT-STEPS.md                     ← step-by-step implementation tracker
 ├── package.json
 ├── next.config.js
 ├── tailwind.config.js
-├── .env.local                    ← app-level secrets only (never committed)
-├── .env.example                  ← template for required env vars
+├── .env.local                        ← app-level secrets only (never committed)
+├── .env.example                      ← template for required env vars
 ├── public/
-│   ├── manifest.json             ← PWA manifest
-│   └── icons/                    ← PWA icons
+│   ├── manifest.json                 ← PWA manifest
+│   └── icons/
+│       ├── icon-192.png              ← PWA icon (dark calendar theme)
+│       └── icon-512.png              ← PWA icon (dark calendar theme)
 ├── src/
+│   ├── middleware.ts                  ← Edge middleware: route protection (Web Crypto HMAC)
 │   ├── app/
-│   │   ├── layout.tsx            ← root layout, global styles
-│   │   ├── page.tsx              ← main calendar page
-│   │   ├── api/
-│   │   │   ├── auth/
-│   │   │   │   ├── google/
-│   │   │   │   │   ├── route.ts         ← Google OAuth callback (saves tokens to Redis)
-│   │   │   │   │   └── connect/route.ts ← initiate Google OAuth (encodes memberId in state)
-│   │   │   │   ├── outlook/
-│   │   │   │   │   ├── route.ts         ← Outlook OAuth callback
-│   │   │   │   │   └── connect/route.ts ← initiate Outlook OAuth
-│   │   │   │   └── apple/
-│   │   │   │       └── test/route.ts    ← POST: test CalDAV creds + discover calendars
-│   │   │   ├── accounts/
-│   │   │   │   ├── route.ts             ← GET all accounts, POST create, DELETE remove
-│   │   │   │   └── [id]/
-│   │   │   │       ├── route.ts         ← PATCH update account (toggle calendars, relabel)
-│   │   │   │       └── calendars/route.ts ← GET discover calendars for this account
-│   │   │   ├── family/
-│   │   │   │   └── route.ts             ← CRUD family members
-│   │   │   ├── calendars/
-│   │   │   │   └── route.ts             ← GET all events (aggregated across all accounts)
-│   │   │   ├── events/
-│   │   │   │   └── route.ts             ← POST create event (writes to provider)
-│   │   │   └── settings/
-│   │   │       └── route.ts             ← GET/PUT app settings
-│   │   └── settings/
-│   │       └── page.tsx                 ← Settings UI: family members + calendar accounts
+│   │   ├── layout.tsx                ← root layout, global styles, metadata
+│   │   ├── page.tsx                  ← main calendar page
+│   │   ├── globals.css               ← design system (CSS vars + Tailwind + settings styles)
+│   │   ├── login/
+│   │   │   └── page.tsx              ← login page (username/password form)
+│   │   ├── settings/
+│   │   │   └── page.tsx              ← Settings UI: members, accounts, dimming, weather, PIN
+│   │   └── api/
+│   │       ├── auth/
+│   │       │   ├── login/route.ts            ← POST: verify credentials, set session cookie
+│   │       │   ├── logout/route.ts           ← POST: clear session cookie
+│   │       │   ├── google/
+│   │       │   │   ├── route.ts              ← Google OAuth callback
+│   │       │   │   └── connect/route.ts      ← initiate Google OAuth
+│   │       │   ├── outlook/
+│   │       │   │   ├── route.ts              ← Outlook OAuth callback
+│   │       │   │   └── connect/route.ts      ← initiate Outlook OAuth
+│   │       │   └── apple/
+│   │       │       └── test/route.ts         ← POST: test CalDAV creds + save account
+│   │       ├── accounts/
+│   │       │   ├── route.ts                  ← GET (list, auth stripped), DELETE
+│   │       │   └── [id]/
+│   │       │       └── route.ts              ← GET single, PATCH update
+│   │       ├── family/
+│   │       │   └── route.ts                  ← GET/POST/PATCH/DELETE family members
+│   │       ├── calendars/
+│   │       │   └── route.ts                  ← GET aggregated events from all accounts
+│   │       ├── notes/
+│   │       │   └── route.ts                  ← GET/PUT daily notes per date
+│   │       ├── weather/
+│   │       │   └── route.ts                  ← GET current weather (Open-Meteo proxy)
+│   │       └── settings/
+│   │           ├── route.ts                  ← GET/PUT app settings
+│   │           └── verify-pin/route.ts       ← GET (PIN required?), POST (verify PIN)
 │   ├── components/
 │   │   ├── calendar/
-│   │   │   ├── MonthView.tsx
-│   │   │   ├── WeekView.tsx
-│   │   │   ├── DayView.tsx
-│   │   │   ├── AgendaSidebar.tsx
-│   │   │   ├── EventCard.tsx
-│   │   │   ├── EventModal.tsx           ← quick-add / edit
-│   │   │   └── MiniCalendar.tsx
+│   │   │   ├── MonthView.tsx         ← month grid with all-day banners
+│   │   │   ├── WeekView.tsx          ← week grid with all-day section + drag-to-create
+│   │   │   ├── DayView.tsx           ← day timeline with all-day section + drag-to-create
+│   │   │   ├── AgendaSidebar.tsx     ← selected day + 6 days upcoming + daily notes
+│   │   │   ├── MiniCalendar.tsx      ← compact month calendar for sidebar navigation
+│   │   │   ├── EventModal.tsx        ← quick-add new event (supports drag pre-fill)
+│   │   │   └── EventDetailModal.tsx  ← view event details (click any event)
 │   │   ├── settings/
-│   │   │   ├── FamilyMemberList.tsx     ← manage family members (add/edit/remove)
-│   │   │   ├── AccountList.tsx          ← list connected accounts per member
-│   │   │   ├── AddAccountFlow.tsx       ← provider picker + OAuth redirect / Apple form
-│   │   │   └── CalendarPicker.tsx       ← toggle which calendars from an account to show
-│   │   ├── layout/
-│   │   │   ├── TopBar.tsx
-│   │   │   ├── Sidebar.tsx
-│   │   │   └── Clock.tsx
-│   │   └── ui/                          ← shared UI primitives
-│   ├── lib/
-│   │   ├── calendar/
-│   │   │   ├── google.ts                ← Google Calendar API client
-│   │   │   ├── apple.ts                 ← CalDAV client for iCloud
-│   │   │   ├── outlook.ts              ← Microsoft Graph client
-│   │   │   └── types.ts                ← CalendarEvent, ConnectedAccount, FamilyMember
-│   │   ├── redis.ts                     ← Upstash Redis client + typed helpers
-│   │   └── utils.ts                     ← date helpers, formatters
+│   │   │   ├── FamilyMemberList.tsx  ← manage family members (add/edit/remove)
+│   │   │   ├── AccountList.tsx       ← list connected accounts per member
+│   │   │   └── AddAccountFlow.tsx    ← provider picker + OAuth redirect / Apple form
+│   │   └── layout/
+│   │       ├── TopBar.tsx            ← nav, view toggle, add event, settings gear, weather
+│   │       ├── Sidebar.tsx           ← family member + calendar type toggles
+│   │       ├── Clock.tsx             ← live clock display
+│   │       └── WeatherWidget.tsx     ← current weather in top bar
 │   ├── hooks/
-│   │   ├── useCalendarEvents.ts         ← fetches aggregated events from /api/calendars
-│   │   ├── useCalendarNavigation.ts     ← view state, date navigation
-│   │   └── useEventFilters.ts           ← family/type toggle state
-│   └── styles/
-│       └── globals.css
-└── docs/
-    ├── SETUP.md                         ← step-by-step setup guide
-    ├── HARDWARE.md                      ← display/Pi setup guide
-    ├── GOOGLE-SETUP.md                  ← Google Cloud project walkthrough
-    ├── APPLE-SETUP.md                   ← iCloud app-specific password guide
-    └── OUTLOOK-SETUP.md                 ← Azure app registration guide
+│   │   ├── useCalendarEvents.ts      ← fetches /api/calendars + /api/family, 5-min poll
+│   │   ├── useCalendarNavigation.ts  ← view state, date navigation
+│   │   ├── useEventFilters.ts        ← family/type toggles via disabledMembers Set
+│   │   └── useScreenDim.ts           ← screen dimming based on schedule from Redis
+│   └── lib/
+│       ├── auth.ts                   ← HMAC-SHA256 session token creation/verification
+│       ├── oauth-state.ts            ← HMAC-signed OAuth state + one-time nonce
+│       ├── redis.ts                  ← Upstash Redis client + typed helpers (includes daily notes)
+│       ├── sampleData.ts             ← sample events for demo/no-account-connected fallback
+│       ├── utils.ts                  ← date helpers, formatters, eventSpansDay
+│       └── calendar/
+│           ├── types.ts              ← CalendarEvent, ConnectedAccount, FamilyMember, AppSettings
+│           ├── google.ts             ← Google Calendar API client (token refresh, fetch)
+│           ├── outlook.ts            ← Microsoft Graph API client (token refresh, fetch)
+│           ├── apple.ts              ← CalDAV client (tsdav), iCal parser (VEVENT scoping)
+│           └── recurrence.ts         ← rrule-based recurring event expansion
 ```
 
 ---
@@ -367,14 +385,18 @@ UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
 
 # ── App ──
-NEXTAUTH_SECRET=              # used to encrypt session cookies
+NEXTAUTH_SECRET=              # used to sign session cookies and OAuth state
 NEXT_PUBLIC_APP_URL=http://localhost:3000  # base URL (set to Vercel URL in prod)
+
+# ── Login ──
+AUTH_USERNAME=                # username for app login
+AUTH_PASSWORD=                # password for app login
 ```
 
-**What moved out of `.env`:**
+**What lives in Redis instead of `.env`:**
 - `APPLE_CALDAV_USERNAME` / `APPLE_CALDAV_APP_PASSWORD` → stored per-account in Redis
 - `GOOGLE_REDIRECT_URI` / `AZURE_REDIRECT_URI` → computed from `NEXT_PUBLIC_APP_URL`
-- `NEXT_PUBLIC_REFRESH_INTERVAL`, `NEXT_PUBLIC_DIM_START/END` → stored in Redis settings, managed via UI
+- `NEXT_PUBLIC_REFRESH_INTERVAL`, dim schedule, weather config → stored in Redis settings, managed via UI
 - Per-user OAuth tokens → stored per-account in Redis
 
 ---
@@ -427,7 +449,14 @@ Each family member can have **multiple** connected accounts across **any** provi
 {
   "refreshInterval": 300000,
   "defaultView": "month",
-  "dimSchedule": { "start": "22:00", "end": "06:00" }
+  "dimSchedule": { "start": "22:00", "end": "06:00" },
+  "weather": {
+    "enabled": true,
+    "latitude": 32.7767,
+    "longitude": -96.7970,
+    "label": "Dallas"
+  },
+  "settingsPin": ""
 }
 ```
 
@@ -493,7 +522,57 @@ interface CalendarEvent {
     provider: CalendarProvider
   }
 }
+
+// ── App Settings ──
+interface AppSettings {
+  refreshInterval: number        // ms, default 300000 (5 min)
+  defaultView: CalendarView
+  dimSchedule: {
+    start: string                // HH:MM
+    end: string                  // HH:MM
+  }
+  weather: {
+    enabled: boolean
+    latitude: number
+    longitude: number
+    label: string                // city name for display
+  }
+  settingsPin: string            // numeric PIN, empty = disabled
+}
+
+// ── UI Types ──
+interface FamilyMemberUI extends FamilyMember {
+  enabled: boolean               // client-side toggle state, not stored in Redis
+}
+
+type CalendarView = 'month' | 'week' | 'day'
 ```
+
+---
+
+## Authentication & Security
+
+### App Login
+- Simple username/password login (`AUTH_USERNAME` / `AUTH_PASSWORD` env vars)
+- HMAC-SHA256 signed session token stored in `familyhub_session` cookie (30-day expiry)
+- Server-side verification via `crypto.timingSafeEqual`
+- Edge middleware (`src/middleware.ts`) protects all routes except `/login`, `/api/auth/login`, OAuth callbacks, and static assets
+- Uses Web Crypto API in middleware (Edge runtime compatible)
+
+### OAuth CSRF Protection
+- OAuth state params are HMAC-SHA256 signed with `NEXTAUTH_SECRET`
+- One-time nonce stored in Redis with 10-minute TTL
+- State payload encodes `memberId`, `calendarType`, and `nonce`
+- Callback verifies signature AND consumes nonce (prevents replay)
+
+### Settings PIN
+- Optional numeric PIN (up to 8 digits) stored in Redis as part of AppSettings
+- Settings page shows PIN gate modal when PIN is configured
+- PIN verified server-side via `/api/settings/verify-pin`
+
+### Apple Credentials
+- CalDAV credentials (email + app-specific password) are tested and saved server-side only
+- Credentials are never returned to the client (auth field stripped from GET /api/accounts)
 
 ---
 
@@ -536,8 +615,8 @@ Use **Fully Kiosk Browser** (free for basic use) — locks device to a single UR
 
 ```bash
 # Clone & install
-git clone https://github.com/your-username/familyhub.git
-cd familyhub
+git clone https://github.com/sdtalley/TalleyCalendar.git
+cd TalleyCalendar
 npm install
 
 # Set up environment
@@ -564,16 +643,39 @@ This project is designed to be iterated on with Claude Code. Key conventions:
 
 ---
 
+## Data Flow
+
+```
+Settings UI                          Calendar UI
+    │                                     │
+    ▼                                     ▼
+/api/accounts (CRUD)              /api/calendars (GET)
+/api/family (CRUD)                      │
+    │                                     ▼
+    ▼                              For each ConnectedAccount in Redis:
+Redis                               ├─ google.ts → Google Calendar API
+  account:{id}                      ├─ outlook.ts → Microsoft Graph API
+  accounts:byMember:{id}            └─ apple.ts → CalDAV (iCloud)
+  family:members                          │
+  settings                                ▼
+                                   Normalize → CalendarEvent[]
+                                          │
+                                          ▼
+                                   Return to UI → render on calendar
+```
+
+---
+
 ## Open Questions / Decisions
 
-- [x] **Auth model**: ~~Single-family app vs. multi-user with login?~~ → **Multi-account, single-family app.** No login required (private deployment), but each family member connects their own calendar accounts via the Settings UI.
+- [x] **Auth model**: ~~Single-family app vs. multi-user with login?~~ → **Multi-account, single-family app.** Simple username/password login protects the deployment. Each family member connects their own calendar accounts via the Settings UI.
 - [x] **Family member management UI**: ~~Settings page vs. config file vs. KV editor?~~ → **Settings page** with full CRUD for family members and calendar accounts.
 - [x] **Apple single-user limitation**: ~~One Apple account in .env~~ → **Per-user Apple credentials stored in Redis**, each family member connects their own.
 - [x] **Microsoft work accounts**: ~~Personal accounts only~~ → **Multitenant + personal** Azure app registration, supports both work (Entra ID) and personal accounts.
+- [x] **Settings access control**: ~~Should Settings require a PIN?~~ → **Yes**, optional numeric PIN gate implemented for kiosk mode.
 - [ ] **Event write-back**: When creating an event on the display, which calendar should it write to by default? Probably configurable per family member (default write-back calendar in Settings).
 - [ ] **Sync frequency**: 5 minutes default — is this fast enough? Could use webhooks for Google/Outlook for near-real-time.
 - [ ] **Offline handling**: Should the app cache events locally (service worker) so it still shows data if internet drops?
-- [ ] **Settings access control**: Should the Settings page require a PIN to prevent kids from accidentally disconnecting accounts?
 
 ---
 
@@ -583,8 +685,8 @@ This project is designed to be iterated on with Claude Code. Key conventions:
 - [Apple CalDAV](https://developer.apple.com/library/archive/documentation/DataManagement/Conceptual/CloudKitWebServicesReference/)
 - [Microsoft Graph Calendar](https://learn.microsoft.com/en-us/graph/api/resources/calendar)
 - [tsdav (CalDAV client)](https://github.com/natelindev/tsdav)
-- [NextAuth.js](https://next-auth.js.org/)
-- [Upstash Redis](https://upstash.com/docs/redis/overall/getstarted) — replaces deprecated Vercel KV
+- [Open-Meteo Weather API](https://open-meteo.com/en/docs)
+- [Upstash Redis](https://upstash.com/docs/redis/overall/getstarted)
 - [Fully Kiosk Browser](https://www.fully-kiosk.com/)
 - [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
 - [Tailscale](https://tailscale.com/)

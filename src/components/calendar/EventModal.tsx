@@ -6,6 +6,8 @@ import type { FamilyMember, NewEventDraft, CalendarType } from '@/lib/calendar/t
 interface EventModalProps {
   open: boolean
   initialDate?: Date
+  initialStartTime?: string  // HH:MM from drag-to-create
+  initialEndTime?: string    // HH:MM from drag-to-create
   familyMembers: FamilyMember[]
   onClose: () => void
   onSave: (draft: NewEventDraft) => void
@@ -25,6 +27,8 @@ function toDateString(d: Date): string {
 export function EventModal({
   open,
   initialDate,
+  initialStartTime,
+  initialEndTime,
   familyMembers,
   onClose,
   onSave,
@@ -46,6 +50,8 @@ export function EventModal({
         ...prev,
         date: toDateString(initialDate ?? new Date()),
         title: '',
+        startTime: initialStartTime ?? '09:00',
+        endTime: initialEndTime ?? '10:00',
       }))
       setTimeout(() => titleRef.current?.focus(), 50)
     }

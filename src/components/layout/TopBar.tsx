@@ -14,6 +14,8 @@ interface TopBarProps {
   onToday: () => void
   onViewChange: (v: CalendarView) => void
   onAddEvent: () => void
+  searchQuery: string
+  onSearchChange: (q: string) => void
 }
 
 const VIEWS: { id: CalendarView; label: string }[] = [
@@ -30,6 +32,8 @@ export function TopBar({
   onToday,
   onViewChange,
   onAddEvent,
+  searchQuery,
+  onSearchChange,
 }: TopBarProps) {
   return (
     <header
@@ -82,8 +86,32 @@ export function TopBar({
         </div>
       </div>
 
-      {/* Right: view toggle + add + clock */}
+      {/* Right: search + view toggle + add + clock */}
       <div className="flex items-center gap-3">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search events..."
+            value={searchQuery}
+            onChange={e => onSearchChange(e.target.value)}
+            className="text-[13px] pl-8 pr-3 py-[7px] rounded-[8px] w-[180px] focus:w-[240px] transition-all duration-200"
+            style={{
+              background: 'var(--surface2)',
+              border: '1px solid var(--border)',
+              color: 'var(--text)',
+              outline: 'none',
+            }}
+            onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
+            onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+          />
+          <span
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[13px] pointer-events-none"
+            style={{ color: 'var(--text-faint)' }}
+          >
+            🔍
+          </span>
+        </div>
+
         <div
           className="flex rounded-[8px] overflow-hidden"
           style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}

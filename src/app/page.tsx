@@ -45,12 +45,29 @@ export default function CalendarPage() {
 
   const [modalOpen, setModalOpen] = useState(false)
   const [modalInitialDate, setModalInitialDate] = useState<Date | undefined>()
+  const [dragTimeRange, setDragTimeRange] = useState<{ startTime: string; endTime: string } | null>(null)
   const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // Apply search filter on top of member/type filters
+  const displayEvents = searchQuery.trim()
+    ? visibleEvents.filter(e => {
+        const q = searchQuery.toLowerCase()
+        return (
+          e.title.toLowerCase().includes(q) ||
+          (e.location?.toLowerCase().includes(q) ?? false) ||
+          (e.description?.toLowerCase().includes(q) ?? false)
+        )
+      })
+    : visibleEvents
 
   // Keyboard shortcuts
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) {
+        if (e.key === 'Escape') (e.target as HTMLElement).blur()
+        return
+      }
       switch (e.key) {
         case 'ArrowLeft': goPrev(); break
         case 'ArrowRight': goNext(); break
@@ -59,6 +76,13 @@ export default function CalendarPage() {
         case 'm': changeView('month'); break
         case 'w': changeView('week'); break
         case 'd': changeView('day'); break
+        case '/': {
+          e.preventDefault()
+          const searchInput = document.querySelector<HTMLInputElement>('input[placeholder="Search events..."]')
+          searchInput?.focus()
+          break
+        }
+        case 'Escape': setSearchQuery(''); break
       }
     }
     window.addEventListener('keydown', onKey)
@@ -72,6 +96,19 @@ export default function CalendarPage() {
 
   function handleAddEvent() {
     setModalInitialDate(selectedDate)
+    setModalOpen(true)
+  }
+
+  function handleDragCreate(date: Date, startMinutes: number, endMinutes: number) {
+    const sh = Math.floor(startMinutes / 60)
+    const sm = startMinutes % 60
+    const eh = Math.floor(endMinutes / 60)
+    const em = endMinutes % 60
+    setModalInitialDate(date)
+    setDragTimeRange({
+      startTime: `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`,
+      endTime: `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`,
+    })
     setModalOpen(true)
   }
 
@@ -120,6 +157,8 @@ export default function CalendarPage() {
           onToday={goToday}
           onViewChange={changeView}
           onAddEvent={handleAddEvent}
+          searchQuery=""
+          onSearchChange={() => {}}
         />
         <div className="flex items-center justify-center flex-1" style={{ color: 'var(--text-dim)' }}>
           Loading calendar...
@@ -138,6 +177,8 @@ export default function CalendarPage() {
         onToday={goToday}
         onViewChange={changeView}
         onAddEvent={handleAddEvent}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
       />
 
       {calError && (
@@ -153,8 +194,10 @@ export default function CalendarPage() {
         <Sidebar
           familyMembers={familyMembers}
           calTypes={calTypes}
+          selectedDate={selectedDate}
           onToggleMember={toggleMember}
           onToggleCalType={toggleCalType}
+          onSelectDate={handleSelectDate}
         />
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -162,7 +205,7 @@ export default function CalendarPage() {
             <MonthView
               currentDate={currentDate}
               selectedDate={selectedDate}
-              events={visibleEvents}
+              events={displayEvents}
               onSelectDate={handleSelectDate}
               onEventClick={handleEventClick}
             />
@@ -170,22 +213,24 @@ export default function CalendarPage() {
           {view === 'week' && (
             <WeekView
               currentDate={currentDate}
-              events={visibleEvents}
+              events={displayEvents}
               onEventClick={handleEventClick}
+              onDragCreate={handleDragCreate}
             />
           )}
           {view === 'day' && (
             <DayView
               currentDate={currentDate}
-              events={visibleEvents}
+              events={displayEvents}
               onEventClick={handleEventClick}
+              onDragCreate={handleDragCreate}
             />
           )}
         </div>
 
         <AgendaSidebar
           selectedDate={selectedDate}
-          events={visibleEvents}
+          events={displayEvents}
           onEventClick={handleEventClick}
         />
       </div>
@@ -193,8 +238,10 @@ export default function CalendarPage() {
       <EventModal
         open={modalOpen}
         initialDate={modalInitialDate}
+        initialStartTime={dragTimeRange?.startTime}
+        initialEndTime={dragTimeRange?.endTime}
         familyMembers={familyMembers}
-        onClose={() => setModalOpen(false)}
+        onClose={() => { setModalOpen(false); setDragTimeRange(null) }}
         onSave={handleSaveEvent}
       />
 

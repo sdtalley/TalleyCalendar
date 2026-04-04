@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { getWeekDates, sameDay, eventSpansDay, formatTime, hexToRgba } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
@@ -11,12 +11,18 @@ interface WeekViewProps {
   currentDate: Date
   events: CalendarEvent[]
   onEventClick: (event: CalendarEvent) => void
+  onDragCreate?: (date: Date, startMinutes: number, endMinutes: number) => void
 }
 
-export function WeekView({ currentDate, events, onEventClick }: WeekViewProps) {
+function snapToQuarter(minutes: number): number {
+  return Math.round(minutes / 15) * 15
+}
+
+export function WeekView({ currentDate, events, onEventClick, onDragCreate }: WeekViewProps) {
   const today = new Date()
   const weekDates = getWeekDates(currentDate)
   const bodyRef = useRef<HTMLDivElement>(null)
+  const columnRefs = useRef<(HTMLDivElement | null)[]>([])
 
   // Split events: all-day/multi-day vs timed
   const allDayEvents = events.filter(e => e.allDay || !sameDay(e.start, e.end))
@@ -28,10 +34,64 @@ export function WeekView({ currentDate, events, onEventClick }: WeekViewProps) {
   )
   const maxAllDay = Math.max(0, ...allDayByDay.map(d => d.length))
 
+  // Drag-to-create state
+  const [dragDayIndex, setDragDayIndex] = useState<number | null>(null)
+  const [dragStart, setDragStart] = useState<number | null>(null)
+  const [dragEnd, setDragEnd] = useState<number | null>(null)
+  const dragging = useRef(false)
+
   // Scroll to 7am on mount
   useEffect(() => {
     if (bodyRef.current) {
       bodyRef.current.scrollTop = 7 * HOUR_HEIGHT
+    }
+  }, [])
+
+  const getMinutesFromY = useCallback((clientY: number, colEl: HTMLDivElement | null): number => {
+    if (!colEl) return 0
+    const rect = colEl.getBoundingClientRect()
+    const scrollTop = bodyRef.current?.scrollTop ?? 0
+    const y = clientY - rect.top + scrollTop
+    const minutes = (y / (24 * HOUR_HEIGHT)) * 24 * 60
+    return Math.max(0, Math.min(24 * 60, snapToQuarter(minutes)))
+  }, [])
+
+  const handleMouseDown = useCallback((e: React.MouseEvent, dayIndex: number) => {
+    if ((e.target as HTMLElement).closest('button')) return
+    dragging.current = true
+    const min = getMinutesFromY(e.clientY, columnRefs.current[dayIndex])
+    setDragDayIndex(dayIndex)
+    setDragStart(min)
+    setDragEnd(min + 30)
+  }, [getMinutesFromY])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent, dayIndex: number) => {
+    if (!dragging.current || dragDayIndex !== dayIndex || dragStart === null) return
+    setDragEnd(getMinutesFromY(e.clientY, columnRefs.current[dayIndex]))
+  }, [dragDayIndex, dragStart, getMinutesFromY])
+
+  const handleMouseUp = useCallback((dayIndex: number) => {
+    if (!dragging.current || dragDayIndex !== dayIndex || dragStart === null || dragEnd === null) {
+      dragging.current = false
+      return
+    }
+    dragging.current = false
+    const start = Math.min(dragStart, dragEnd)
+    const end = Math.max(dragStart, dragEnd)
+    if (end - start >= 15 && onDragCreate) {
+      onDragCreate(weekDates[dayIndex], start, end)
+    }
+    setDragDayIndex(null)
+    setDragStart(null)
+    setDragEnd(null)
+  }, [dragDayIndex, dragStart, dragEnd, weekDates, onDragCreate])
+
+  const handleMouseLeave = useCallback(() => {
+    if (dragging.current) {
+      dragging.current = false
+      setDragDayIndex(null)
+      setDragStart(null)
+      setDragEnd(null)
     }
   }, [])
 
@@ -138,12 +198,25 @@ export function WeekView({ currentDate, events, onEventClick }: WeekViewProps) {
         {weekDates.map((day, di) => {
           const dayEvents = timedEvents.filter(e => sameDay(e.start, day))
           const nowMinutes = today.getHours() * 60 + today.getMinutes()
+          const isDragTarget = dragDayIndex === di && dragStart !== null && dragEnd !== null
+
+          const previewTop = isDragTarget
+            ? (Math.min(dragStart!, dragEnd!) / 60) * HOUR_HEIGHT
+            : 0
+          const previewHeight = isDragTarget
+            ? (Math.abs(dragEnd! - dragStart!) / 60) * HOUR_HEIGHT
+            : 0
 
           return (
             <div
               key={di}
-              className="relative"
-              style={{ borderLeft: '1px solid var(--border)' }}
+              ref={el => { columnRefs.current[di] = el }}
+              className="relative select-none"
+              style={{ borderLeft: '1px solid var(--border)', cursor: 'crosshair' }}
+              onMouseDown={e => handleMouseDown(e, di)}
+              onMouseMove={e => handleMouseMove(e, di)}
+              onMouseUp={() => handleMouseUp(di)}
+              onMouseLeave={handleMouseLeave}
             >
               {/* Hour lines */}
               {HOURS.map(h => (
@@ -152,6 +225,20 @@ export function WeekView({ currentDate, events, onEventClick }: WeekViewProps) {
                   style={{ height: HOUR_HEIGHT, borderBottom: '1px solid var(--border)' }}
                 />
               ))}
+
+              {/* Drag preview */}
+              {isDragTarget && previewHeight > 0 && (
+                <div
+                  className="absolute left-[2px] right-[2px] rounded-md pointer-events-none"
+                  style={{
+                    top: previewTop,
+                    height: previewHeight,
+                    background: 'rgba(108,140,255,0.15)',
+                    border: '2px dashed var(--accent)',
+                    zIndex: 5,
+                  }}
+                />
+              )}
 
               {/* Events */}
               {dayEvents.map(ev => {

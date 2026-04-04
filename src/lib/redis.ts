@@ -20,6 +20,7 @@ const KEYS = {
   account: (id: string) => `account:${id}`,
   accountsByMember: (memberId: string) => `accounts:byMember:${memberId}`,
   settings: 'settings',
+  note: (date: string) => `note:${date}`,
 } as const
 
 // ── Family Members ─────────────────────────────────────────────────────────
@@ -149,4 +150,19 @@ export async function updateSettings(
   const updated = { ...current, ...updates }
   await redis.set(KEYS.settings, updated)
   return updated
+}
+
+// ── Daily Notes ───────────────────────────────────────────────────────────
+
+export async function getNote(date: string): Promise<string> {
+  const note = await redis.get<string>(KEYS.note(date))
+  return note ?? ''
+}
+
+export async function setNote(date: string, content: string): Promise<void> {
+  if (content.trim()) {
+    await redis.set(KEYS.note(date), content)
+  } else {
+    await redis.del(KEYS.note(date))
+  }
 }
