@@ -53,22 +53,37 @@ export async function fetchAppleEvents(
 
   const enabledCals = account.enabledCalendars.filter(c => c.enabled)
 
+  // tsdav expects ISO strings for timeRange
+  const start = timeMin.toISOString()
+  const end = timeMax.toISOString()
+
   for (const cal of enabledCals) {
     try {
-      const calObjects = await client.fetchCalendarObjects({
+      // First try with timeRange filter
+      let calObjects = await client.fetchCalendarObjects({
         calendar: { url: cal.calendarId } as DAVCalendar,
-        timeRange: {
-          start: timeMin.toISOString(),
-          end: timeMax.toISOString(),
-        },
+        timeRange: { start, end },
       })
 
-      for (const obj of calObjects) {
-        const parsed = parseVEvent(obj.data, account, cal)
-        if (parsed) events.push(parsed)
+      // If no results, try fetching all objects (some CalDAV servers don't support time-range)
+      if (calObjects.length === 0) {
+        calObjects = await client.fetchCalendarObjects({
+          calendar: { url: cal.calendarId } as DAVCalendar,
+        })
       }
-    } catch {
-      // Skip calendars that fail
+
+      for (const obj of calObjects) {
+        if (!obj.data) continue
+        const parsed = parseVEvent(obj.data, account, cal)
+        if (parsed) {
+          // Manual time filter for the fallback case
+          if (parsed.end >= timeMin && parsed.start <= timeMax) {
+            events.push(parsed)
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[Apple] Failed to fetch calendar ${cal.name}:`, err instanceof Error ? err.message : err)
     }
   }
 

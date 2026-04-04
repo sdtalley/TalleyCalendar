@@ -19,18 +19,20 @@ export default function CalendarPage() {
     useCalendarNavigation()
 
   // Fetch real events from connected accounts
-  const { events: liveEvents, members: liveMembers, loading } = useCalendarEvents()
+  const { events: liveEvents, members: liveMembers, loading, error: calError } = useCalendarEvents()
 
   // Sample events as fallback when no accounts connected
   const [sampleEvents] = useState<CalendarEvent[]>(() => generateSampleEvents())
   const [localEvents, setLocalEvents] = useState<CalendarEvent[]>([])
 
-  // Use live data if we have any connected accounts, otherwise show sample data
-  const hasLiveData = liveEvents.length > 0 || liveMembers.length > 0
-  const baseEvents = hasLiveData ? [...liveEvents, ...localEvents] : [...sampleEvents, ...localEvents]
+  // Use live data if family members exist in Redis, otherwise show sample data
+  const hasRealSetup = liveMembers.length > 0
+  const baseEvents = hasRealSetup
+    ? [...liveEvents, ...localEvents]
+    : [...sampleEvents, ...localEvents]
 
   // Build UI members: use live members from Redis if available, else sample
-  const uiMembers: FamilyMemberUI[] = hasLiveData
+  const uiMembers: FamilyMemberUI[] = hasRealSetup
     ? liveMembers.map(m => ({ ...m, enabled: true }))
     : DEFAULT_FAMILY_MEMBERS
 
@@ -113,6 +115,15 @@ export default function CalendarPage() {
         onAddEvent={handleAddEvent}
       />
 
+      {calError && (
+        <div
+          className="px-4 py-2 text-xs text-center"
+          style={{ background: 'rgba(255,107,107,0.1)', color: '#ff6b6b' }}
+        >
+          {calError}
+        </div>
+      )}
+
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <Sidebar
           familyMembers={familyMembers}
@@ -122,7 +133,7 @@ export default function CalendarPage() {
         />
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {loading && !hasLiveData ? (
+          {loading && !hasRealSetup ? (
             <div className="flex items-center justify-center flex-1" style={{ color: 'var(--text-dim)' }}>
               Loading calendar...
             </div>

@@ -75,5 +75,11 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     events: allEvents,
     errors: errors.length > 0 ? errors : undefined,
+    _debug: {
+      totalAccounts: accounts.length,
+      connectedAccounts: connectedAccounts.length,
+      totalMembers: members.length,
+      totalEvents: allEvents.length,
+    },
   })
 }
