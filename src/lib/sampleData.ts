@@ -1,49 +1,13 @@
-import type { CalendarEvent, FamilyMember } from './calendar/types'
+import type { CalendarEvent, FamilyMemberUI } from './calendar/types'
 import { addMinutes } from './utils'
 
-export const DEFAULT_FAMILY_MEMBERS: FamilyMember[] = [
-  {
-    id: 'you',
-    name: 'You',
-    color: '#6c8cff',
-    enabled: true,
-    calendars: [{ provider: 'google', calendarId: 'primary', type: 'personal' }],
-  },
-  {
-    id: 'partner',
-    name: 'Partner',
-    color: '#ff6b8a',
-    enabled: true,
-    calendars: [{ provider: 'apple', calendarId: 'personal', type: 'personal' }],
-  },
-  {
-    id: 'kid1',
-    name: 'Alex',
-    color: '#4ecdc4',
-    enabled: true,
-    calendars: [{ provider: 'local', calendarId: 'shared', type: 'kids' }],
-  },
-  {
-    id: 'kid2',
-    name: 'Jordan',
-    color: '#ffd166',
-    enabled: true,
-    calendars: [{ provider: 'local', calendarId: 'shared', type: 'kids' }],
-  },
-  {
-    id: 'work_you',
-    name: 'Work (You)',
-    color: '#a78bfa',
-    enabled: true,
-    calendars: [{ provider: 'outlook', calendarId: 'primary', type: 'work' }],
-  },
-  {
-    id: 'work_partner',
-    name: 'Work (Partner)',
-    color: '#ff8c42',
-    enabled: true,
-    calendars: [{ provider: 'outlook', calendarId: 'primary', type: 'work' }],
-  },
+export const DEFAULT_FAMILY_MEMBERS: FamilyMemberUI[] = [
+  { id: 'you', name: 'You', color: '#6c8cff', enabled: true },
+  { id: 'partner', name: 'Partner', color: '#ff6b8a', enabled: true },
+  { id: 'kid1', name: 'Alex', color: '#4ecdc4', enabled: true },
+  { id: 'kid2', name: 'Jordan', color: '#ffd166', enabled: true },
+  { id: 'work_you', name: 'Work (You)', color: '#a78bfa', enabled: true },
+  { id: 'work_partner', name: 'Work (Partner)', color: '#ff8c42', enabled: true },
 ]
 
 const memberColors: Record<string, string> = {
@@ -112,6 +76,7 @@ export function generateSampleEvents(): CalendarEvent[] {
       events.push({
         id: `sample-${day}-${i}`,
         provider: 'local',
+        accountId: 'sample',
         title: t.title,
         start,
         end,

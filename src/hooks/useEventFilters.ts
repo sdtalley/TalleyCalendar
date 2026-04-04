@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
-import type { CalendarEvent, FamilyMember } from '@/lib/calendar/types'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import type { CalendarEvent, FamilyMemberUI } from '@/lib/calendar/types'
 
 export const DEFAULT_CAL_TYPES = [
   { id: 'personal', name: 'Personal', enabled: true },
@@ -12,10 +12,28 @@ export const DEFAULT_CAL_TYPES = [
 
 export function useEventFilters(
   allEvents: CalendarEvent[],
-  initialMembers: FamilyMember[]
+  initialMembers: FamilyMemberUI[]
 ) {
-  const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>(initialMembers)
+  const [familyMembers, setFamilyMembers] = useState<FamilyMemberUI[]>(initialMembers)
   const [calTypes, setCalTypes] = useState(DEFAULT_CAL_TYPES)
+
+  // Track previous member IDs to detect when the source list changes
+  const prevMemberIdsRef = useRef<string>('')
+
+  useEffect(() => {
+    const newIds = initialMembers.map(m => m.id).sort().join(',')
+    if (newIds !== prevMemberIdsRef.current) {
+      prevMemberIdsRef.current = newIds
+      // Merge: keep toggle state for existing members, add new ones as enabled
+      setFamilyMembers(prev => {
+        const toggleState = new Map(prev.map(m => [m.id, m.enabled]))
+        return initialMembers.map(m => ({
+          ...m,
+          enabled: toggleState.get(m.id) ?? true,
+        }))
+      })
+    }
+  }, [initialMembers])
 
   const toggleMember = useCallback((id: string) => {
     setFamilyMembers(prev =>

@@ -1,9 +1,9 @@
 'use client'
 
-import type { FamilyMember } from '@/lib/calendar/types'
+import type { FamilyMemberUI } from '@/lib/calendar/types'
 
 interface SidebarProps {
-  familyMembers: FamilyMember[]
+  familyMembers: FamilyMemberUI[]
   calTypes: { id: string; name: string; enabled: boolean }[]
   onToggleMember: (id: string) => void
   onToggleCalType: (id: string) => void
@@ -53,12 +53,6 @@ export function Sidebar({
               <div>
                 <div className="text-sm font-medium" style={{ color: 'var(--text)' }}>
                   {member.name}
-                </div>
-                <div
-                  className="font-mono text-[10px]"
-                  style={{ color: 'var(--text-faint)' }}
-                >
-                  {member.calendars[0]?.provider ?? 'local'}
                 </div>
               </div>
             </button>

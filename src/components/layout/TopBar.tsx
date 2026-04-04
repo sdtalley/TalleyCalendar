@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { Clock } from './Clock'
 import { formatMonthYear } from '@/lib/utils'
 import type { CalendarView } from '@/lib/calendar/types'
@@ -119,6 +120,29 @@ export function TopBar({
         >
           ＋ Add Event
         </button>
+
+        <Link
+          href="/settings"
+          className="w-9 h-9 flex items-center justify-center rounded-[8px] text-lg cursor-pointer transition-all duration-150 no-underline"
+          style={{
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-dim)',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'var(--surface3)'
+            e.currentTarget.style.borderColor = 'var(--accent)'
+            e.currentTarget.style.color = 'var(--text)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'var(--surface2)'
+            e.currentTarget.style.borderColor = 'var(--border)'
+            e.currentTarget.style.color = 'var(--text-dim)'
+          }}
+          title="Settings"
+        >
+          ⚙
+        </Link>
 
         <Clock />
       </div>

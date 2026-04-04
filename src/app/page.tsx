@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useCallback, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { MonthView } from '@/components/calendar/MonthView'
@@ -10,21 +10,32 @@ import { AgendaSidebar } from '@/components/calendar/AgendaSidebar'
 import { EventModal } from '@/components/calendar/EventModal'
 import { useCalendarNavigation } from '@/hooks/useCalendarNavigation'
 import { useEventFilters } from '@/hooks/useEventFilters'
+import { useCalendarEvents } from '@/hooks/useCalendarEvents'
 import { generateSampleEvents, DEFAULT_FAMILY_MEMBERS } from '@/lib/sampleData'
-import type { CalendarEvent, NewEventDraft } from '@/lib/calendar/types'
+import type { CalendarEvent, FamilyMemberUI, NewEventDraft } from '@/lib/calendar/types'
 
 export default function CalendarPage() {
   const { currentDate, selectedDate, view, goToday, goPrev, goNext, selectDate, changeView } =
     useCalendarNavigation()
 
-  // Stable sample events seeded once
-  const [allEvents, setAllEvents] = useState<CalendarEvent[]>([])
-  useEffect(() => {
-    setAllEvents(generateSampleEvents())
-  }, [])
+  // Fetch real events from connected accounts
+  const { events: liveEvents, members: liveMembers, loading } = useCalendarEvents()
+
+  // Sample events as fallback when no accounts connected
+  const [sampleEvents] = useState<CalendarEvent[]>(() => generateSampleEvents())
+  const [localEvents, setLocalEvents] = useState<CalendarEvent[]>([])
+
+  // Use live data if we have any connected accounts, otherwise show sample data
+  const hasLiveData = liveEvents.length > 0 || liveMembers.length > 0
+  const baseEvents = hasLiveData ? [...liveEvents, ...localEvents] : [...sampleEvents, ...localEvents]
+
+  // Build UI members: use live members from Redis if available, else sample
+  const uiMembers: FamilyMemberUI[] = hasLiveData
+    ? liveMembers.map(m => ({ ...m, enabled: true }))
+    : DEFAULT_FAMILY_MEMBERS
 
   const { familyMembers, calTypes, visibleEvents, toggleMember, toggleCalType } =
-    useEventFilters(allEvents, DEFAULT_FAMILY_MEMBERS)
+    useEventFilters(baseEvents, uiMembers)
 
   const [modalOpen, setModalOpen] = useState(false)
   const [modalInitialDate, setModalInitialDate] = useState<Date | undefined>()
@@ -32,33 +43,15 @@ export default function CalendarPage() {
   // Keyboard shortcuts
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      // Don't fire shortcuts when typing in inputs
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
-
       switch (e.key) {
-        case 'ArrowLeft':
-          goPrev()
-          break
-        case 'ArrowRight':
-          goNext()
-          break
-        case 't':
-        case 'T':
-          goToday()
-          break
-        case 'n':
-        case 'N':
-          setModalOpen(true)
-          break
-        case 'm':
-          changeView('month')
-          break
-        case 'w':
-          changeView('week')
-          break
-        case 'd':
-          changeView('day')
-          break
+        case 'ArrowLeft': goPrev(); break
+        case 'ArrowRight': goNext(); break
+        case 't': case 'T': goToday(); break
+        case 'n': case 'N': setModalOpen(true); break
+        case 'm': changeView('month'); break
+        case 'w': changeView('week'); break
+        case 'd': changeView('day'); break
       }
     }
     window.addEventListener('keydown', onKey)
@@ -89,6 +82,7 @@ export default function CalendarPage() {
     const newEvent: CalendarEvent = {
       id: `local-${Date.now()}`,
       provider: 'local',
+      accountId: 'local',
       title: draft.title,
       start,
       end,
@@ -100,12 +94,11 @@ export default function CalendarPage() {
       source: { calendarId: 'local', calendarName: 'Local', provider: 'local' },
     }
 
-    setAllEvents(prev => [...prev, newEvent])
+    setLocalEvents(prev => [...prev, newEvent])
   }
 
-  function handleEventClick(event: CalendarEvent) {
-    // Placeholder — event detail view will go here
-    console.log('Event clicked:', event.title)
+  function handleEventClick(_event: CalendarEvent) {
+    // TODO: event detail view
   }
 
   return (
@@ -128,30 +121,37 @@ export default function CalendarPage() {
           onToggleCalType={toggleCalType}
         />
 
-        {/* Calendar area */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {view === 'month' && (
-            <MonthView
-              currentDate={currentDate}
-              selectedDate={selectedDate}
-              events={visibleEvents}
-              onSelectDate={handleSelectDate}
-              onEventClick={handleEventClick}
-            />
-          )}
-          {view === 'week' && (
-            <WeekView
-              currentDate={currentDate}
-              events={visibleEvents}
-              onEventClick={handleEventClick}
-            />
-          )}
-          {view === 'day' && (
-            <DayView
-              currentDate={currentDate}
-              events={visibleEvents}
-              onEventClick={handleEventClick}
-            />
+          {loading && !hasLiveData ? (
+            <div className="flex items-center justify-center flex-1" style={{ color: 'var(--text-dim)' }}>
+              Loading calendar...
+            </div>
+          ) : (
+            <>
+              {view === 'month' && (
+                <MonthView
+                  currentDate={currentDate}
+                  selectedDate={selectedDate}
+                  events={visibleEvents}
+                  onSelectDate={handleSelectDate}
+                  onEventClick={handleEventClick}
+                />
+              )}
+              {view === 'week' && (
+                <WeekView
+                  currentDate={currentDate}
+                  events={visibleEvents}
+                  onEventClick={handleEventClick}
+                />
+              )}
+              {view === 'day' && (
+                <DayView
+                  currentDate={currentDate}
+                  events={visibleEvents}
+                  onEventClick={handleEventClick}
+                />
+              )}
+            </>
           )}
         </div>
 
