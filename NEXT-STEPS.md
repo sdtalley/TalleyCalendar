@@ -108,10 +108,10 @@ Ask Claude Code to:
 - [x] Multi-day / all-day event rendering
 - [x] Event detail view / edit modal
 - [x] Auto-refresh polling (5-min interval in useCalendarEvents hook)
-- [ ] PWA icons — need `public/icons/icon-192.png` and `public/icons/icon-512.png`
-- [ ] Screen dimming schedule (dim at night, bright in morning — configurable in Settings)
-- [ ] Weather widget
-- [ ] Settings PIN protection (prevent accidental disconnects on kiosk)
+- [x] PWA icons — `public/icons/icon-192.png` and `public/icons/icon-512.png`
+- [x] Screen dimming schedule (configurable in Settings, default 10pm–6am)
+- [x] Weather widget (Open-Meteo, no API key, configurable in Settings)
+- [x] Settings PIN protection (numeric PIN gate for kiosk mode)
 
 ## Phase 3 Backlog
 
