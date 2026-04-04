@@ -105,9 +105,9 @@ Ask Claude Code to:
 
 ## Phase 2 Backlog (after integrations work)
 
-- [ ] Multi-day / all-day event rendering
-- [ ] Event detail view / edit modal (currently clicking an event does nothing)
-- [ ] Auto-refresh polling (configurable via Settings, default 5 min)
+- [x] Multi-day / all-day event rendering
+- [x] Event detail view / edit modal
+- [x] Auto-refresh polling (5-min interval in useCalendarEvents hook)
 - [ ] PWA icons — need `public/icons/icon-192.png` and `public/icons/icon-512.png`
 - [ ] Screen dimming schedule (dim at night, bright in morning — configurable in Settings)
 - [ ] Weather widget
