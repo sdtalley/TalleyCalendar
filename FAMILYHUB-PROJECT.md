@@ -129,12 +129,16 @@ Pi 3B/4/5 running:
 - [x] Live clock display
 - [x] Keyboard shortcuts (arrow keys, T for today, N for new event)
 - [x] Dark theme optimized for always-on display
-- [ ] Google Calendar OAuth integration (read + write)
-- [ ] Apple iCloud CalDAV integration (read + write)
-- [ ] Outlook / Microsoft Graph integration (read + write)
-- [ ] Persistent storage (Upstash Redis for tokens & config)
-- [ ] Auto-refresh / polling for calendar updates (configurable interval)
 - [x] PWA manifest (installable on phones, add-to-homescreen)
+- [ ] Upstash Redis integration (store family members, accounts, settings)
+- [ ] Settings page — family member management (add/edit/remove, pick color)
+- [ ] Settings page — "Add Calendar Account" flow (pick provider + member)
+- [ ] Google Calendar OAuth flow (connect → discover calendars → pick which to show)
+- [ ] Microsoft Outlook OAuth flow (multitenant: personal + work/Entra accounts)
+- [ ] Apple iCloud CalDAV flow (enter creds in UI → test connection → discover calendars)
+- [ ] Account management (status indicators, toggle, reconnect, remove)
+- [ ] Aggregated event fetching (all connected accounts → unified CalendarEvent list)
+- [ ] Auto-refresh / polling for calendar updates (configurable via Settings)
 
 ### Phase 2 — Polish & Usability
 
@@ -169,31 +173,90 @@ Pi 3B/4/5 running:
 
 ---
 
-## Calendar Integration Details
+## Calendar Account Architecture
 
-### Google Calendar
+### Design Principle: Multi-Account, UI-Driven
 
-- **Auth**: OAuth 2.0 via Google Cloud Console (free tier)
-- **Setup required**: Create a Google Cloud project, enable Calendar API, create OAuth credentials
-- **Scopes**: `https://www.googleapis.com/auth/calendar.readonly` (read), `https://www.googleapis.com/auth/calendar.events` (write)
-- **Endpoints**: `GET /calendars/{id}/events`, `POST /calendars/{id}/events`
-- **Refresh**: OAuth refresh tokens stored in Vercel KV
+Every calendar connection is managed **from the Settings UI**, not from `.env` files. Family
+members can each connect their own accounts across any provider. `.env` holds only the
+**app-level OAuth client credentials** (one Google project, one Azure app registration).
+Per-user tokens and Apple credentials are stored in **Upstash Redis**, keyed per account.
 
-### Apple iCloud Calendar
+### Account Model (stored in Redis)
 
-- **Auth**: App-specific password (generated at appleid.apple.com)
-- **Protocol**: CalDAV (WebDAV extension)
+```
+Redis key structure:
+  family:members                     → JSON array of FamilyMember objects
+  account:{accountId}                → JSON ConnectedAccount object
+  accounts:byMember:{memberId}       → JSON array of accountId strings
+  settings                           → JSON AppSettings object
+```
+
+```typescript
+interface ConnectedAccount {
+  id: string                          // uuid
+  provider: 'google' | 'outlook' | 'apple'
+  familyMemberId: string              // which family member owns this
+  label: string                       // display name, e.g. "Dad's Work Gmail"
+  email: string                       // the account email (for display)
+  calendarType: CalendarType          // personal | work | kids | shared
+
+  // Provider-specific auth (encrypted at rest in Redis)
+  auth:
+    | { type: 'oauth'; accessToken: string; refreshToken: string; expiresAt: number }
+    | { type: 'caldav'; username: string; appPassword: string }
+
+  // Which calendars from this account are enabled
+  enabledCalendars: {
+    calendarId: string                // e.g. "primary", "family@group.calendar.google.com"
+    name: string                      // display name from provider
+    enabled: boolean
+  }[]
+
+  status: 'connected' | 'error' | 'reauth_needed'
+  connectedAt: string                 // ISO date
+  lastSyncAt?: string                 // ISO date
+}
+```
+
+### Settings UI Flow
+
+1. **Settings → Family Members**: Add/edit/remove family members (name, color)
+2. **Settings → Calendar Accounts**: "Add Calendar Account" button
+3. User picks a **provider** (Google, Microsoft, Apple) and a **family member**
+4. **Google / Microsoft**: Redirect to OAuth consent → callback saves tokens → app fetches
+   available calendars from that account → user picks which to show and categorizes them
+5. **Apple**: Inline form for iCloud email + app-specific password → app tests the CalDAV
+   connection → on success, fetches available calendars → user picks which to show
+6. Connected accounts are listed per family member with status indicator, toggle, and remove
+
+### Provider Details
+
+#### Google Calendar
+- **App setup** (one-time, by you): Google Cloud Console → project → enable Calendar API → OAuth 2.0 credentials
+- **Auth flow**: OAuth 2.0 with refresh tokens. State param encodes `memberId` so callback knows who to associate
+- **Scopes**: `calendar.readonly` (read), `calendar.events` (write)
+- **Endpoints**: Google Calendar API v3 — `GET /users/me/calendarList` (discover calendars), `GET /calendars/{id}/events` (fetch events)
+- **Token refresh**: Automatic — refresh token stored in Redis, access token refreshed server-side when expired
+- **Gotcha**: App starts in "Testing" mode (100 users max). Fine for family use. Google verification needed only if you want to open it to others.
+
+#### Microsoft Outlook (personal + work accounts)
+- **App setup** (one-time, by you): Azure Portal → App Registration
+  - **Supported account types: "Accounts in any organizational directory AND personal Microsoft accounts"** (multitenant + personal)
+  - This allows both personal Outlook.com accounts AND work/school Entra ID accounts
+- **Auth flow**: OAuth 2.0 via MSAL. State param encodes `memberId`
+- **Scopes**: `Calendars.ReadWrite`, `User.Read`
+- **Endpoints**: Microsoft Graph API — `GET /me/calendars` (discover), `GET /me/calendars/{id}/events` (fetch)
+- **Work account gotcha**: Some organizations require admin consent for third-party apps. If your Entra tenant blocks it, you (as admin) can grant consent in Azure Portal → Enterprise Applications → your app → Permissions → "Grant admin consent"
+- **Tenant ID**: Use `common` to support all account types
+
+#### Apple iCloud Calendar
+- **Auth**: No OAuth available. Each user generates an **app-specific password** at appleid.apple.com
+- **Protocol**: CalDAV (WebDAV extension) via `tsdav` library
 - **Server**: `https://caldav.icloud.com`
-- **Library**: `tsdav` (TypeScript CalDAV client) or raw HTTP
-- **Notes**: No OAuth — uses basic auth with app-specific password. Simpler but requires manual password rotation if revoked.
-
-### Microsoft Outlook
-
-- **Auth**: OAuth 2.0 via Azure AD app registration (free)
-- **Setup required**: Register app in Azure Portal, configure redirect URIs
-- **Scopes**: `Calendars.ReadWrite`
-- **Endpoints**: Microsoft Graph API `/me/calendar/events`
-- **Library**: `@azure/msal-node` for auth, raw fetch for Graph API
+- **Flow**: User enters iCloud email + app-specific password in Settings UI → app tests connection server-side → on success, discovers calendars via CalDAV PROPFIND → saves credentials to Redis
+- **Multiple users**: Each family member can add their own Apple account (credentials stored per-account in Redis, not in `.env`)
+- **Gotcha**: Credentials can't be validated until we try to connect. The UI must test on save and show clear success/failure. If Apple revokes the app-specific password, the account status changes to `reauth_needed`
 
 ---
 
@@ -206,7 +269,7 @@ familyhub/
 ├── package.json
 ├── next.config.js
 ├── tailwind.config.js
-├── .env.local                    ← secrets (never committed)
+├── .env.local                    ← app-level secrets only (never committed)
 ├── .env.example                  ← template for required env vars
 ├── public/
 │   ├── manifest.json             ← PWA manifest
@@ -218,22 +281,28 @@ familyhub/
 │   │   ├── api/
 │   │   │   ├── auth/
 │   │   │   │   ├── google/
-│   │   │   │   │   ├── route.ts        ← Google OAuth callback
-│   │   │   │   │   └── connect/route.ts ← initiate Google OAuth
+│   │   │   │   │   ├── route.ts         ← Google OAuth callback (saves tokens to Redis)
+│   │   │   │   │   └── connect/route.ts ← initiate Google OAuth (encodes memberId in state)
 │   │   │   │   ├── outlook/
-│   │   │   │   │   ├── route.ts
-│   │   │   │   │   └── connect/route.ts
+│   │   │   │   │   ├── route.ts         ← Outlook OAuth callback
+│   │   │   │   │   └── connect/route.ts ← initiate Outlook OAuth
 │   │   │   │   └── apple/
-│   │   │   │       └── route.ts        ← save CalDAV credentials
+│   │   │   │       └── test/route.ts    ← POST: test CalDAV creds + discover calendars
+│   │   │   ├── accounts/
+│   │   │   │   ├── route.ts             ← GET all accounts, POST create, DELETE remove
+│   │   │   │   └── [id]/
+│   │   │   │       ├── route.ts         ← PATCH update account (toggle calendars, relabel)
+│   │   │   │       └── calendars/route.ts ← GET discover calendars for this account
+│   │   │   ├── family/
+│   │   │   │   └── route.ts             ← CRUD family members
 │   │   │   ├── calendars/
-│   │   │   │   ├── route.ts            ← GET all events (aggregated)
-│   │   │   │   ├── google/route.ts     ← fetch Google events
-│   │   │   │   ├── apple/route.ts      ← fetch iCloud events
-│   │   │   │   └── outlook/route.ts    ← fetch Outlook events
-│   │   │   └── events/
-│   │   │       └── route.ts            ← POST create event
+│   │   │   │   └── route.ts             ← GET all events (aggregated across all accounts)
+│   │   │   ├── events/
+│   │   │   │   └── route.ts             ← POST create event (writes to provider)
+│   │   │   └── settings/
+│   │   │       └── route.ts             ← GET/PUT app settings
 │   │   └── settings/
-│   │       └── page.tsx                ← family members, calendar config
+│   │       └── page.tsx                 ← Settings UI: family members + calendar accounts
 │   ├── components/
 │   │   ├── calendar/
 │   │   │   ├── MonthView.tsx
@@ -241,144 +310,188 @@ familyhub/
 │   │   │   ├── DayView.tsx
 │   │   │   ├── AgendaSidebar.tsx
 │   │   │   ├── EventCard.tsx
-│   │   │   ├── EventModal.tsx          ← quick-add / edit
+│   │   │   ├── EventModal.tsx           ← quick-add / edit
 │   │   │   └── MiniCalendar.tsx
+│   │   ├── settings/
+│   │   │   ├── FamilyMemberList.tsx     ← manage family members (add/edit/remove)
+│   │   │   ├── AccountList.tsx          ← list connected accounts per member
+│   │   │   ├── AddAccountFlow.tsx       ← provider picker + OAuth redirect / Apple form
+│   │   │   └── CalendarPicker.tsx       ← toggle which calendars from an account to show
 │   │   ├── layout/
 │   │   │   ├── TopBar.tsx
 │   │   │   ├── Sidebar.tsx
 │   │   │   └── Clock.tsx
-│   │   └── ui/                         ← shared UI primitives
+│   │   └── ui/                          ← shared UI primitives
 │   ├── lib/
 │   │   ├── calendar/
-│   │   │   ├── google.ts               ← Google Calendar API client
-│   │   │   ├── apple.ts                ← CalDAV client for iCloud
+│   │   │   ├── google.ts                ← Google Calendar API client
+│   │   │   ├── apple.ts                 ← CalDAV client for iCloud
 │   │   │   ├── outlook.ts              ← Microsoft Graph client
-│   │   │   └── types.ts               ← unified CalendarEvent type
-│   │   ├── store.ts                    ← Vercel KV helpers
-│   │   └── utils.ts                    ← date helpers, formatters
+│   │   │   └── types.ts                ← CalendarEvent, ConnectedAccount, FamilyMember
+│   │   ├── redis.ts                     ← Upstash Redis client + typed helpers
+│   │   └── utils.ts                     ← date helpers, formatters
 │   ├── hooks/
-│   │   ├── useCalendarEvents.ts        ← data fetching + caching
-│   │   ├── useCalendarNavigation.ts    ← view state, date navigation
-│   │   └── useEventFilters.ts          ← family/type toggle state
+│   │   ├── useCalendarEvents.ts         ← fetches aggregated events from /api/calendars
+│   │   ├── useCalendarNavigation.ts     ← view state, date navigation
+│   │   └── useEventFilters.ts           ← family/type toggle state
 │   └── styles/
 │       └── globals.css
 └── docs/
-    ├── SETUP.md                        ← step-by-step setup guide
-    ├── HARDWARE.md                     ← display/Pi setup guide
-    ├── GOOGLE-SETUP.md                 ← Google Cloud project walkthrough
-    ├── APPLE-SETUP.md                  ← iCloud app-specific password guide
-    └── OUTLOOK-SETUP.md                ← Azure app registration guide
+    ├── SETUP.md                         ← step-by-step setup guide
+    ├── HARDWARE.md                      ← display/Pi setup guide
+    ├── GOOGLE-SETUP.md                  ← Google Cloud project walkthrough
+    ├── APPLE-SETUP.md                   ← iCloud app-specific password guide
+    └── OUTLOOK-SETUP.md                 ← Azure app registration guide
 ```
 
 ---
 
 ## Environment Variables
 
+`.env` holds **app-level credentials only** — no per-user tokens or passwords.
+
 ```bash
 # .env.example
 
-# Google Calendar
+# ── Google Calendar (OAuth app credentials — one project for all users) ──
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=https://your-app.vercel.app/api/auth/google
 
-# Microsoft Outlook
+# ── Microsoft Outlook (Azure app registration — multitenant + personal) ──
 AZURE_CLIENT_ID=
 AZURE_CLIENT_SECRET=
 AZURE_TENANT_ID=common
-AZURE_REDIRECT_URI=https://your-app.vercel.app/api/auth/outlook
 
-# Apple iCloud (stored per-user, but defaults can go here)
-APPLE_CALDAV_USERNAME=
-APPLE_CALDAV_APP_PASSWORD=
-
-# Upstash Redis (create free DB at upstash.com, copy REST URL + token)
+# ── Upstash Redis (stores per-user tokens, family config, settings) ──
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
 
-# App
-NEXTAUTH_SECRET=
-NEXTAUTH_URL=https://your-app.vercel.app
-NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
-
-# Display settings
-NEXT_PUBLIC_REFRESH_INTERVAL=300000   # poll interval in ms (5 min default)
-NEXT_PUBLIC_DIM_START=22:00           # screen dim start time
-NEXT_PUBLIC_DIM_END=06:00             # screen dim end time
+# ── App ──
+NEXTAUTH_SECRET=              # used to encrypt session cookies
+NEXT_PUBLIC_APP_URL=http://localhost:3000  # base URL (set to Vercel URL in prod)
 ```
+
+**What moved out of `.env`:**
+- `APPLE_CALDAV_USERNAME` / `APPLE_CALDAV_APP_PASSWORD` → stored per-account in Redis
+- `GOOGLE_REDIRECT_URI` / `AZURE_REDIRECT_URI` → computed from `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_REFRESH_INTERVAL`, `NEXT_PUBLIC_DIM_START/END` → stored in Redis settings, managed via UI
+- Per-user OAuth tokens → stored per-account in Redis
 
 ---
 
 ## Configuration Model
 
-Family members and their calendar mappings are stored in Vercel KV:
+All configuration is stored in **Upstash Redis** and managed via the **Settings UI**.
+
+### Family Members (Redis key: `family:members`)
+
+```json
+[
+  { "id": "dad", "name": "Dad", "color": "#6c8cff" },
+  { "id": "mom", "name": "Mom", "color": "#ff6b8a" },
+  { "id": "alex", "name": "Alex", "color": "#4ecdc4" }
+]
+```
+
+### Connected Accounts (Redis key: `account:{id}`)
+
+Each family member can have **multiple** connected accounts across **any** provider:
 
 ```json
 {
-  "family": [
-    {
-      "id": "you",
-      "name": "Dad",
-      "color": "#6c8cff",
-      "calendars": [
-        { "provider": "google", "calendarId": "primary", "type": "personal" },
-        { "provider": "outlook", "calendarId": "AAA...", "type": "work" }
-      ]
-    },
-    {
-      "id": "partner",
-      "name": "Mom",
-      "color": "#ff6b8a",
-      "calendars": [
-        { "provider": "apple", "calendarId": "personal", "type": "personal" },
-        { "provider": "outlook", "calendarId": "BBB...", "type": "work" }
-      ]
-    },
-    {
-      "id": "kid1",
-      "name": "Alex",
-      "color": "#4ecdc4",
-      "calendars": [
-        { "provider": "google", "calendarId": "family-shared-id", "type": "kids" }
-      ]
-    }
+  "id": "acc_a1b2c3",
+  "provider": "google",
+  "familyMemberId": "dad",
+  "label": "Dad's Gmail",
+  "email": "dad@gmail.com",
+  "calendarType": "personal",
+  "auth": {
+    "type": "oauth",
+    "accessToken": "ya29...",
+    "refreshToken": "1//0e...",
+    "expiresAt": 1712345678
+  },
+  "enabledCalendars": [
+    { "calendarId": "primary", "name": "Dad's Calendar", "enabled": true },
+    { "calendarId": "family@group.calendar.google.com", "name": "Family", "enabled": true }
   ],
-  "calendarTypes": ["personal", "work", "kids", "shared"],
-  "settings": {
-    "refreshInterval": 300000,
-    "defaultView": "month",
-    "dimSchedule": { "start": "22:00", "end": "06:00" }
-  }
+  "status": "connected",
+  "connectedAt": "2026-04-03T12:00:00Z",
+  "lastSyncAt": "2026-04-03T14:30:00Z"
+}
+```
+
+### App Settings (Redis key: `settings`)
+
+```json
+{
+  "refreshInterval": 300000,
+  "defaultView": "month",
+  "dimSchedule": { "start": "22:00", "end": "06:00" }
 }
 ```
 
 ---
 
-## Unified Event Type
+## Core Types
 
-All calendar sources normalize to this shape:
+All calendar sources normalize events to a common shape. Accounts track per-user connections.
 
 ```typescript
+// ── Enums ──
+type CalendarProvider = 'google' | 'apple' | 'outlook' | 'local'
+type CalendarType = 'personal' | 'work' | 'kids' | 'shared'
+
+// ── Family Member ──
+interface FamilyMember {
+  id: string
+  name: string
+  color: string
+}
+
+// ── Connected Account (stored in Redis per-account) ──
+interface ConnectedAccount {
+  id: string
+  provider: CalendarProvider
+  familyMemberId: string
+  label: string
+  email: string
+  calendarType: CalendarType
+  auth:
+    | { type: 'oauth'; accessToken: string; refreshToken: string; expiresAt: number }
+    | { type: 'caldav'; username: string; appPassword: string }
+  enabledCalendars: {
+    calendarId: string
+    name: string
+    enabled: boolean
+  }[]
+  status: 'connected' | 'error' | 'reauth_needed'
+  connectedAt: string
+  lastSyncAt?: string
+}
+
+// ── Calendar Event (normalized from any provider) ──
 interface CalendarEvent {
-  id: string;
-  externalId: string;           // original ID from provider
-  provider: 'google' | 'apple' | 'outlook';
-  title: string;
-  description?: string;
-  location?: string;
-  start: Date;
-  end: Date;
-  allDay: boolean;
-  recurring: boolean;
-  recurrenceRule?: string;       // RRULE string
-  familyMemberId: string;        // maps to family[].id
-  calendarType: string;          // personal | work | kids | shared
-  color: string;                 // inherited from family member
+  id: string
+  externalId?: string
+  provider: CalendarProvider
+  accountId: string              // which ConnectedAccount this came from
+  title: string
+  description?: string
+  location?: string
+  start: Date
+  end: Date
+  allDay: boolean
+  recurring: boolean
+  recurrenceRule?: string
+  familyMemberId: string         // inherited from the account's owner
+  calendarType: CalendarType     // inherited from the account's type
+  color: string                  // inherited from the family member
   source: {
-    calendarId: string;
-    calendarName: string;
-    provider: string;
-  };
+    calendarId: string
+    calendarName: string
+    provider: CalendarProvider
+  }
 }
 ```
 
@@ -453,11 +566,14 @@ This project is designed to be iterated on with Claude Code. Key conventions:
 
 ## Open Questions / Decisions
 
-- [ ] **Auth model**: Single-family app (one set of credentials) vs. multi-user with login? Leaning single-family since this is a private deployment.
-- [ ] **Event write-back**: When creating an event on the display, which calendar should it write to by default? Probably configurable per family member.
+- [x] **Auth model**: ~~Single-family app vs. multi-user with login?~~ → **Multi-account, single-family app.** No login required (private deployment), but each family member connects their own calendar accounts via the Settings UI.
+- [x] **Family member management UI**: ~~Settings page vs. config file vs. KV editor?~~ → **Settings page** with full CRUD for family members and calendar accounts.
+- [x] **Apple single-user limitation**: ~~One Apple account in .env~~ → **Per-user Apple credentials stored in Redis**, each family member connects their own.
+- [x] **Microsoft work accounts**: ~~Personal accounts only~~ → **Multitenant + personal** Azure app registration, supports both work (Entra ID) and personal accounts.
+- [ ] **Event write-back**: When creating an event on the display, which calendar should it write to by default? Probably configurable per family member (default write-back calendar in Settings).
 - [ ] **Sync frequency**: 5 minutes default — is this fast enough? Could use webhooks for Google/Outlook for near-real-time.
 - [ ] **Offline handling**: Should the app cache events locally (service worker) so it still shows data if internet drops?
-- [ ] **Family member management UI**: Settings page vs. config file vs. KV editor?
+- [ ] **Settings access control**: Should the Settings page require a PIN to prevent kids from accidentally disconnecting accounts?
 
 ---
 
