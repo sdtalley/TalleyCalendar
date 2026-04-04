@@ -79,6 +79,12 @@ export interface AppSettings {
     start: string               // HH:MM
     end: string                 // HH:MM
   }
+  weather: {
+    enabled: boolean
+    latitude: number
+    longitude: number
+    label: string               // city name for display
+  }
 }
 
 // ── UI types ───────────────────────────────────────────────────────────────

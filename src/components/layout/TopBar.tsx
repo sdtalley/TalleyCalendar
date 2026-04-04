@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { Clock } from './Clock'
+import { WeatherWidget } from './WeatherWidget'
 import { formatMonthYear } from '@/lib/utils'
 import type { CalendarView } from '@/lib/calendar/types'
 
@@ -144,6 +145,7 @@ export function TopBar({
           ⚙
         </Link>
 
+        <WeatherWidget />
         <Clock />
       </div>
     </header>

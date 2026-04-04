@@ -15,6 +15,10 @@ export default function SettingsPage() {
   const [accounts, setAccounts] = useState<AccountSafe[]>([])
   const [dimStart, setDimStart] = useState('22:00')
   const [dimEnd, setDimEnd] = useState('06:00')
+  const [weatherEnabled, setWeatherEnabled] = useState(false)
+  const [weatherLat, setWeatherLat] = useState('')
+  const [weatherLon, setWeatherLon] = useState('')
+  const [weatherLabel, setWeatherLabel] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [addAccountMemberId, setAddAccountMemberId] = useState<string | null>(null)
@@ -52,6 +56,12 @@ export default function SettingsPage() {
         const settings: AppSettings = await settingsRes.json()
         setDimStart(settings.dimSchedule.start)
         setDimEnd(settings.dimSchedule.end)
+        if (settings.weather) {
+          setWeatherEnabled(settings.weather.enabled)
+          setWeatherLat(settings.weather.latitude ? String(settings.weather.latitude) : '')
+          setWeatherLon(settings.weather.longitude ? String(settings.weather.longitude) : '')
+          setWeatherLabel(settings.weather.label || '')
+        }
       }
       setError(null)
     } catch {
@@ -249,6 +259,115 @@ export default function SettingsPage() {
               Save
             </button>
           </div>
+        </section>
+
+        {/* Weather Section */}
+        <section
+          className="rounded-2xl p-6"
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+        >
+          <h2 className="text-lg font-bold mb-1" style={{ color: 'var(--text)' }}>
+            Weather
+          </h2>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-dim)' }}>
+            Show current weather in the top bar. Uses Open-Meteo (no API key required).
+          </p>
+
+          <div className="flex items-center gap-3 mb-4">
+            <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--text)' }}>
+              <input
+                type="checkbox"
+                checked={weatherEnabled}
+                onChange={async e => {
+                  const enabled = e.target.checked
+                  setWeatherEnabled(enabled)
+                  if (!enabled) {
+                    await fetch('/api/settings', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        weather: { enabled: false, latitude: 0, longitude: 0, label: '' },
+                      }),
+                    })
+                  }
+                }}
+                style={{ accentColor: 'var(--accent)' }}
+              />
+              Enable weather widget
+            </label>
+          </div>
+
+          {weatherEnabled && (
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-3">
+                <div className="flex flex-col gap-1.5 flex-1">
+                  <label className="field-label">City / Label</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Dallas"
+                    value={weatherLabel}
+                    onChange={e => setWeatherLabel(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <div className="flex flex-col gap-1.5 flex-1">
+                  <label className="field-label">Latitude</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 32.7767"
+                    value={weatherLat}
+                    onChange={e => setWeatherLat(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5 flex-1">
+                  <label className="field-label">Longitude</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. -96.7970"
+                    value={weatherLon}
+                    onChange={e => setWeatherLon(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="text-[11px]" style={{ color: 'var(--text-faint)' }}>
+                Find your coordinates at{' '}
+                <a
+                  href="https://www.latlong.net/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  latlong.net
+                </a>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={async () => {
+                    const lat = parseFloat(weatherLat)
+                    const lon = parseFloat(weatherLon)
+                    if (isNaN(lat) || isNaN(lon)) {
+                      setError('Enter valid latitude and longitude.')
+                      return
+                    }
+                    const res = await fetch('/api/settings', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        weather: { enabled: true, latitude: lat, longitude: lon, label: weatherLabel },
+                      }),
+                    })
+                    if (res.ok) setError(null)
+                    else setError('Failed to save weather settings.')
+                  }}
+                  className="settings-btn-primary"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+
         </section>
       </div>
 

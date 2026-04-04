@@ -133,6 +133,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   refreshInterval: 300000,
   defaultView: 'month' as CalendarView,
   dimSchedule: { start: '22:00', end: '06:00' },
+  weather: { enabled: false, latitude: 0, longitude: 0, label: '' },
 }
 
 export async function getSettings(): Promise<AppSettings> {
