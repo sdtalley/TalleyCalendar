@@ -99,7 +99,17 @@ function parseVEvent(
 ): CalendarEvent | null {
   // Unfold RFC 5545 continuation lines (CRLF + whitespace)
   const unfolded = icalData.replace(/\r?\n[ \t]/g, '')
-  const lines = unfolded.split(/\r?\n/)
+  const allLines = unfolded.split(/\r?\n/)
+
+  // Extract only lines inside BEGIN:VEVENT / END:VEVENT
+  // (avoids picking up DTSTART/RRULE from VTIMEZONE blocks)
+  const lines: string[] = []
+  let inVEvent = false
+  for (const line of allLines) {
+    if (line === 'BEGIN:VEVENT') { inVEvent = true; continue }
+    if (line === 'END:VEVENT') { inVEvent = false; continue }
+    if (inVEvent) lines.push(line)
+  }
 
   let uid = ''
   let summary = ''
@@ -116,8 +126,9 @@ function parseVEvent(
     else if (line.startsWith('DESCRIPTION:')) description = line.slice(12)
     else if (line.startsWith('LOCATION:')) location = line.slice(9)
     else if (line.startsWith('DTSTART')) {
-      isAllDay = line.includes('VALUE=DATE:') || (!line.includes('T') && !line.includes('VALUE=DATE-TIME'))
-      dtstart = line.split(':').pop() ?? ''
+      const value = line.split(':').pop() ?? ''
+      isAllDay = line.includes('VALUE=DATE:') || (!value.includes('T'))
+      dtstart = value
     } else if (line.startsWith('DTEND')) {
       dtend = line.split(':').pop() ?? ''
     } else if (line.startsWith('RRULE:')) {
