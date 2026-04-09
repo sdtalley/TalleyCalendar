@@ -158,6 +158,14 @@ Pi 3B/4/5 running:
 - [x] Mini calendar in sidebar for quick date navigation
 - [x] Daily notes / meal plan section (per-day notes in AgendaSidebar, saved to Redis)
 
+### Phase 2.5 — Event Write-Back (prerequisite for drag-to-reschedule)
+
+- [ ] Default write-back calendar per family member (configurable in Settings)
+- [ ] `POST /api/events` — create event on provider (Google Calendar API, MS Graph)
+- [ ] `PATCH /api/events/:id` — update event on provider (move, resize, rename)
+- [ ] `DELETE /api/events/:id` — delete event on provider
+- [ ] Drag-to-reschedule — drag existing events in Week/Day views to new times (requires write-back to update provider)
+
 ### Phase 3 — Home Assistant Integration
 
 - [ ] Embed HA dashboard as a tab/panel
