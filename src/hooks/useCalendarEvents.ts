@@ -35,11 +35,23 @@ export function useCalendarEvents(): UseCalendarEventsResult {
       if (calRes.ok) {
         const data = await calRes.json()
         // Rehydrate Date objects from JSON strings
-        const hydrated = (data.events ?? []).map((e: CalendarEvent) => ({
-          ...e,
-          start: new Date(e.start),
-          end: new Date(e.end),
-        }))
+        const hydrated = (data.events ?? []).map((e: CalendarEvent) => {
+          const startStr = e.start as unknown as string
+          const endStr = e.end as unknown as string
+          let start: Date
+          let end: Date
+          if (e.allDay) {
+            // Server sends UTC midnight; parse date portion only to avoid timezone day-shift
+            const [sy, sm, sd] = startStr.slice(0, 10).split('-').map(Number)
+            start = new Date(sy, sm - 1, sd)
+            const [ey, em, ed] = endStr.slice(0, 10).split('-').map(Number)
+            end = new Date(ey, em - 1, ed)
+          } else {
+            start = new Date(startStr)
+            end = new Date(endStr)
+          }
+          return { ...e, start, end }
+        })
         setEvents(hydrated)
         setError(data.errors ? `${data.errors.length} account(s) had errors` : null)
       } else {
