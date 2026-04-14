@@ -14,6 +14,7 @@ interface MonthViewProps {
   events: CalendarEvent[]
   onSelectDate: (date: Date) => void
   onEventClick: (event: CalendarEvent) => void
+  onAddEventOnDate?: (date: Date) => void
 }
 
 export function MonthView({
@@ -22,6 +23,7 @@ export function MonthView({
   events,
   onSelectDate,
   onEventClick,
+  onAddEventOnDate,
 }: MonthViewProps) {
   const today = new Date()
   const year = currentDate.getFullYear()
@@ -31,6 +33,11 @@ export function MonthView({
 
   const gridRef = useRef<HTMLDivElement>(null)
   const [maxShow, setMaxShow] = useState(3)
+
+  // Long-press state (shared across cells — only one touch at a time)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressActive = useRef(false)
+  const touchStartPos = useRef({ x: 0, y: 0 })
 
   useEffect(() => {
     const el = gridRef.current
@@ -86,7 +93,38 @@ export function MonthView({
           return (
             <div
               key={i}
-              onClick={() => onSelectDate(date)}
+              onClick={() => {
+                // Suppress the synthetic click that follows a mobile long-press
+                if (longPressActive.current) {
+                  longPressActive.current = false
+                  return
+                }
+                onSelectDate(date)
+              }}
+              onDoubleClick={() => onAddEventOnDate?.(date)}
+              onTouchStart={e => {
+                touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+                longPressActive.current = false
+                if (longPressTimer.current) clearTimeout(longPressTimer.current)
+                longPressTimer.current = setTimeout(() => {
+                  longPressActive.current = true
+                  onAddEventOnDate?.(date)
+                }, 600)
+              }}
+              onTouchMove={e => {
+                const dx = e.touches[0].clientX - touchStartPos.current.x
+                const dy = e.touches[0].clientY - touchStartPos.current.y
+                if (Math.hypot(dx, dy) > 10 && longPressTimer.current) {
+                  clearTimeout(longPressTimer.current)
+                  longPressTimer.current = null
+                }
+              }}
+              onTouchEnd={() => {
+                if (longPressTimer.current) {
+                  clearTimeout(longPressTimer.current)
+                  longPressTimer.current = null
+                }
+              }}
               className="flex flex-col p-1 cursor-pointer transition-colors duration-100 overflow-hidden relative"
               style={{
                 borderRight: (i + 1) % 7 === 0 ? 'none' : '1px solid var(--border)',

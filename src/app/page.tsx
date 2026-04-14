@@ -103,6 +103,12 @@ export default function CalendarPage() {
     setModalOpen(true)
   }
 
+  function handleAddEventOnDate(date: Date) {
+    setModalInitialDate(date)
+    setDragTimeRange(null)
+    setModalOpen(true)
+  }
+
   function handleDragCreate(date: Date, startMinutes: number, endMinutes: number) {
     const sh = Math.floor(startMinutes / 60)
     const sm = startMinutes % 60
@@ -215,6 +221,7 @@ export default function CalendarPage() {
               events={displayEvents}
               onSelectDate={handleSelectDate}
               onEventClick={handleEventClick}
+              onAddEventOnDate={handleAddEventOnDate}
             />
           )}
           {view === 'week' && (

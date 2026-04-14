@@ -5,6 +5,10 @@ import { sameDay, eventSpansDay, formatTime, formatDateShort } from '@/lib/utils
 import { DayView } from './DayView'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
+const DEFAULT_WIDTH = 300
+const MIN_WIDTH = 240
+const MAX_WIDTH = 520
+
 interface AgendaSidebarProps {
   selectedDate: Date
   events: CalendarEvent[]
@@ -22,6 +26,36 @@ export function AgendaSidebar({ selectedDate, events, onEventClick, onDragCreate
   const [note, setNote] = useState('')
   const [savedNote, setSavedNote] = useState('')
   const [noteLoading, setNoteLoading] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_WIDTH)
+
+  // Resize drag state
+  const isDragging = useRef(false)
+  const dragStartX = useRef(0)
+  const dragStartWidth = useRef(DEFAULT_WIDTH)
+
+  function startResize(clientX: number) {
+    isDragging.current = true
+    dragStartX.current = clientX
+    dragStartWidth.current = sidebarWidth
+
+    function onMove(e: MouseEvent | TouchEvent) {
+      if (!isDragging.current) return
+      const x = 'touches' in e ? e.touches[0].clientX : e.clientX
+      const delta = dragStartX.current - x   // left = wider
+      setSidebarWidth(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, dragStartWidth.current + delta)))
+    }
+    function onUp() {
+      isDragging.current = false
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+      document.removeEventListener('touchmove', onMove)
+      document.removeEventListener('touchend', onUp)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    document.addEventListener('touchmove', onMove, { passive: true })
+    document.addEventListener('touchend', onUp)
+  }
 
   const dateKey = toDateKey(selectedDate)
   const prevDateKey = useRef(dateKey)
@@ -83,13 +117,25 @@ export function AgendaSidebar({ selectedDate, events, onEventClick, onDragCreate
 
   return (
     <aside
-      className="flex flex-col overflow-hidden flex-shrink-0"
+      className="flex flex-col overflow-hidden flex-shrink-0 relative"
       style={{
-        width: 300,
+        width: sidebarWidth,
         background: 'var(--surface)',
         borderLeft: '1px solid var(--border)',
       }}
     >
+      {/* Drag-to-resize handle on the left border */}
+      <div
+        className="absolute top-0 bottom-0 left-0 z-20 flex items-center justify-center group"
+        style={{ width: 6, cursor: 'col-resize' }}
+        onMouseDown={e => { e.preventDefault(); startResize(e.clientX) }}
+        onTouchStart={e => startResize(e.touches[0].clientX)}
+      >
+        <div
+          className="h-12 w-0.5 rounded-full transition-colors duration-150 group-hover:opacity-100 opacity-0"
+          style={{ background: 'var(--accent)' }}
+        />
+      </div>
       {/* Header: date label + Hours/Agenda toggle */}
       <div
         className="px-4 py-3 flex items-center justify-between flex-shrink-0"
