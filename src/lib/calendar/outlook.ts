@@ -102,8 +102,23 @@ export async function fetchOutlookEvents(
       const startRaw = item.start?.dateTime
       const endRaw = item.end?.dateTime
       if (!startRaw) continue
-      const start = new Date(startRaw.endsWith('Z') ? startRaw : startRaw + 'Z')
-      const end = endRaw ? new Date(endRaw.endsWith('Z') ? endRaw : endRaw + 'Z') : new Date(start.getTime() + 3600_000)
+
+      let start: Date
+      let end: Date
+      if (isAllDay) {
+        // Parse date portion only — treating as UTC would shift the day in western timezones
+        const [sy, sm, sd] = startRaw.slice(0, 10).split('-').map(Number)
+        start = new Date(sy, sm - 1, sd)
+        if (endRaw) {
+          const [ey, em, ed] = endRaw.slice(0, 10).split('-').map(Number)
+          end = new Date(ey, em - 1, ed)
+        } else {
+          end = new Date(sy, sm - 1, sd + 1)
+        }
+      } else {
+        start = new Date(startRaw.endsWith('Z') ? startRaw : startRaw + 'Z')
+        end = endRaw ? new Date(endRaw.endsWith('Z') ? endRaw : endRaw + 'Z') : new Date(start.getTime() + 3600_000)
+      }
 
       events.push({
         id: `outlook-${account.id}-${item.id}`,
