@@ -241,6 +241,7 @@ export default function CalendarPage() {
             selectedDate={selectedDate}
             events={displayEvents}
             onEventClick={handleEventClick}
+            onDragCreate={handleDragCreate}
           />
         </div>
       </div>

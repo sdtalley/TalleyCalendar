@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import { getMonthGridDates, sameDay, eventSpansDay, hexToRgba } from '@/lib/utils'
+import { getMonthGridDates, sameDay, eventSpansDay, hexToRgba, formatTime } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -151,7 +151,10 @@ export function MonthView({
                       onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.2)')}
                       onMouseLeave={e => (e.currentTarget.style.filter = '')}
                     >
-                      {ev.title}
+                      {isAllDayStyle
+                        ? ev.title
+                        : <><span style={{ opacity: 0.75 }}>{formatTime(ev.start).replace(' AM', 'a').replace(' PM', 'p')} </span>{ev.title}</>
+                      }
                     </button>
                   )
                 })}

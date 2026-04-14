@@ -18,7 +18,12 @@ interface TopBarProps {
   onSearchChange: (q: string) => void
 }
 
-const VIEWS: { id: CalendarView; label: string }[] = [
+// Desktop hides Day view (it lives in the sidebar); mobile keeps all three
+const DESKTOP_VIEWS: { id: CalendarView; label: string }[] = [
+  { id: 'month', label: 'Month' },
+  { id: 'week', label: 'Week' },
+]
+const ALL_VIEWS: { id: CalendarView; label: string }[] = [
   { id: 'month', label: 'Month' },
   { id: 'week', label: 'Week' },
   { id: 'day', label: 'Day' },
@@ -79,7 +84,7 @@ export function TopBar({
             onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
           />
 
-          <ViewToggle view={view} onViewChange={onViewChange} />
+          <ViewToggle views={DESKTOP_VIEWS} view={view} onViewChange={onViewChange} />
 
           <AddEventButton onClick={onAddEvent} label="＋ Add Event" />
 
@@ -115,7 +120,7 @@ export function TopBar({
         {/* Row 2: Today | view tabs | + Add | settings */}
         <div className="flex items-center justify-between px-4 pb-2 gap-2">
           <TodayButton onClick={onToday} />
-          <ViewToggle view={view} onViewChange={onViewChange} />
+          <ViewToggle views={ALL_VIEWS} view={view} onViewChange={onViewChange} />
           <div className="flex items-center gap-2">
             <AddEventButton onClick={onAddEvent} label="＋" />
             <SettingsLink />
@@ -174,13 +179,21 @@ function TodayButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-function ViewToggle({ view, onViewChange }: { view: CalendarView; onViewChange: (v: CalendarView) => void }) {
+function ViewToggle({
+  views,
+  view,
+  onViewChange,
+}: {
+  views: { id: CalendarView; label: string }[]
+  view: CalendarView
+  onViewChange: (v: CalendarView) => void
+}) {
   return (
     <div
       className="flex rounded-[8px] overflow-hidden"
       style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}
     >
-      {VIEWS.map(v => (
+      {views.map(v => (
         <button
           key={v.id}
           onClick={() => onViewChange(v.id)}
@@ -201,7 +214,7 @@ function AddEventButton({ onClick, label }: { onClick: () => void; label: string
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 px-4 py-2 rounded-[8px] text-sm font-semibold text-white border-none cursor-pointer transition-all duration-150"
+      className="flex items-center gap-1.5 px-4 py-2 rounded-[8px] text-sm font-semibold text-white border-none cursor-pointer transition-all duration-150 whitespace-nowrap"
       style={{
         background: 'var(--accent)',
         boxShadow: '0 4px 16px rgba(108,140,255,0.3)',

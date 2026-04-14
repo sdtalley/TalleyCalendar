@@ -12,13 +12,14 @@ interface DayViewProps {
   events: CalendarEvent[]
   onEventClick: (event: CalendarEvent) => void
   onDragCreate?: (date: Date, startMinutes: number, endMinutes: number) => void
+  hideHeader?: boolean
 }
 
 function snapToQuarter(minutes: number): number {
   return Math.round(minutes / 15) * 15
 }
 
-export function DayView({ currentDate, events, onEventClick, onDragCreate }: DayViewProps) {
+export function DayView({ currentDate, events, onEventClick, onDragCreate, hideHeader }: DayViewProps) {
   const today = new Date()
   const bodyRef = useRef<HTMLDivElement>(null)
   const columnRef = useRef<HTMLDivElement>(null)
@@ -100,20 +101,22 @@ export function DayView({ currentDate, events, onEventClick, onDragCreate }: Day
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
-      {/* Day header */}
-      <div
-        className="flex-shrink-0 px-6 py-4"
-        style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
-      >
-        <div className="text-[28px] font-bold tracking-tight">
-          {formatDateShort(currentDate)}
-          {isToday && (
-            <span className="ml-3 text-base font-semibold" style={{ color: 'var(--accent)' }}>
-              Today
-            </span>
-          )}
+      {/* Day header — hidden when rendered inside the sidebar */}
+      {!hideHeader && (
+        <div
+          className="flex-shrink-0 px-6 py-4"
+          style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
+        >
+          <div className="text-[28px] font-bold tracking-tight">
+            {formatDateShort(currentDate)}
+            {isToday && (
+              <span className="ml-3 text-base font-semibold" style={{ color: 'var(--accent)' }}>
+                Today
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* All-day section */}
       {allDayEvents.length > 0 && (
