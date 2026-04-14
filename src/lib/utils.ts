@@ -7,6 +7,15 @@ export function sameDay(a: Date, b: Date): boolean {
   )
 }
 
+/** Format a time as "9a", "9:30a", "12p", "3:45p" — compact month-cell format */
+export function formatTimeCompact(date: Date): string {
+  const h = date.getHours()
+  const m = date.getMinutes()
+  const suffix = h >= 12 ? 'p' : 'a'
+  const hh = h % 12 || 12
+  return m === 0 ? `${hh}${suffix}` : `${hh}:${String(m).padStart(2, '0')}${suffix}`
+}
+
 /** Format a time as "9:00 AM" */
 export function formatTime(date: Date): string {
   const h = date.getHours()

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect } from 'react'
-import { getMonthGridDates, sameDay, eventSpansDay, hexToRgba, formatTime } from '@/lib/utils'
+import { getMonthGridDates, sameDay, eventSpansDay, hexToRgba, formatTimeCompact } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -134,7 +134,7 @@ export function MonthView({
                         e.stopPropagation()
                         onEventClick(ev)
                       }}
-                      className="text-[11px] px-1.5 py-[2px] rounded text-left font-medium leading-[1.5] truncate w-full border-none cursor-pointer transition-all duration-100"
+                      className="text-[11px] px-1.5 py-[2px] rounded text-left font-medium leading-[1.5] w-full border-none cursor-pointer transition-all duration-100 overflow-hidden"
                       style={
                         isAllDayStyle
                           ? {
@@ -151,10 +151,16 @@ export function MonthView({
                       onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.2)')}
                       onMouseLeave={e => (e.currentTarget.style.filter = '')}
                     >
-                      {isAllDayStyle
-                        ? ev.title
-                        : <><span style={{ opacity: 0.75 }}>{formatTime(ev.start).replace(' AM', 'a').replace(' PM', 'p')} </span>{ev.title}</>
-                      }
+                      {isAllDayStyle ? (
+                        <span className="block truncate">{ev.title}</span>
+                      ) : (
+                        <span className="flex items-baseline gap-0.5">
+                          <span className="flex-1 min-w-0 truncate">{ev.title}</span>
+                          <span className="hidden md:inline flex-shrink-0 text-[10px] opacity-60">
+                            {formatTimeCompact(ev.start)}
+                          </span>
+                        </span>
+                      )}
                     </button>
                   )
                 })}
