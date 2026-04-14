@@ -3,7 +3,8 @@
     "allow": [
       "Bash(command -v node)",
       "Bash(command -v npm)",
-      "Bash(npm --version)"
+      "Bash(npm --version)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

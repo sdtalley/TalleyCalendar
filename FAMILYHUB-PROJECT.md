@@ -171,10 +171,10 @@ Pi 3B/4/5 running:
 - [x] **Day/Week view: remove redundant time text** — time is implied by event position on the hour grid; time text inside blocks removed to recover vertical space on short events
 - [x] **Search bar cleanup** — magnifying glass icon removed; placeholder simplified to "Search"
 
-### Phase 2 — Polish Backlog
+### Phase 2 — Polish Backlog ✅
 
-- [ ] **Longpress / double-click to add event** — on mobile/touchscreen: long-press a month day cell opens the add-event modal pre-filled to that date; on desktop: double-click a day cell does the same
-- [ ] **Resizable sidebar** — drag handle on the inner border of the right sidebar allows horizontal resize (reasonable min/max bounds to keep the main calendar usable)
+- [x] **Longpress / double-click to add event** — double-click a month day cell (desktop) or long-press 600ms (mobile/touchscreen) opens the add-event modal pre-filled to that date; synthetic post-longpress click suppressed so day-select doesn't also fire
+- [x] **Resizable sidebar** — drag handle on left border of right sidebar resizes between 240px–520px; accent pill indicator on hover; mouse and touch both supported
 
 ### Phase 2.5 — Event Write-Back (prerequisite for drag-to-reschedule)
 
