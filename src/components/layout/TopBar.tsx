@@ -45,9 +45,12 @@ export function TopBar({
       className="flex-shrink-0 z-10"
       style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
     >
-      {/* ── Desktop layout (md and up) ── */}
-      <div className="hidden md:flex items-center justify-between px-6 py-3">
-        {/* Left: logo + nav */}
+      {/* ── Desktop layout (md and up) — 3-column grid prevents left/right overlap ── */}
+      <div
+        className="hidden md:grid items-center px-6 py-3"
+        style={{ gridTemplateColumns: '1fr auto 1fr' }}
+      >
+        {/* Col 1 — left: logo + nav */}
         <div className="flex items-center gap-4">
           <div className="font-bold text-xl tracking-tight" style={{ color: 'var(--accent)' }}>
             FamilyHub{' '}
@@ -58,7 +61,7 @@ export function TopBar({
 
           <div className="flex items-center gap-2">
             <NavButton onClick={onPrev} label="‹" />
-            <h2 className="text-[22px] font-semibold min-w-[220px] text-center tracking-tight">
+            <h2 className="text-[22px] font-semibold min-w-[200px] text-center tracking-tight">
               {formatMonthYear(currentDate)}
             </h2>
             <NavButton onClick={onNext} label="›" />
@@ -66,22 +69,35 @@ export function TopBar({
           </div>
         </div>
 
-        {/* Right: search + view toggle + add + clock */}
-        <div className="flex items-center gap-3">
+        {/* Col 2 — center: ambient info */}
+        <div className="flex items-center gap-3 justify-center">
+          <WeatherWidget />
+          <Clock />
+        </div>
+
+        {/* Col 3 — right: controls */}
+        <div className="flex items-center gap-3 justify-end">
           <input
             type="text"
             placeholder="Search"
             value={searchQuery}
             onChange={e => onSearchChange(e.target.value)}
-            className="text-[13px] px-3 py-[7px] rounded-[8px] w-[180px] focus:w-[240px] transition-all duration-200"
+            className="text-[13px] px-3 py-[7px] rounded-[8px] transition-all duration-200"
             style={{
               background: 'var(--surface2)',
               border: '1px solid var(--border)',
               color: 'var(--text)',
               outline: 'none',
+              width: 150,
             }}
-            onFocus={e => (e.currentTarget.style.borderColor = 'var(--accent)')}
-            onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+            onFocus={e => {
+              e.currentTarget.style.borderColor = 'var(--accent)'
+              e.currentTarget.style.width = '200px'
+            }}
+            onBlur={e => {
+              e.currentTarget.style.borderColor = 'var(--border)'
+              e.currentTarget.style.width = '150px'
+            }}
           />
 
           <ViewToggle views={DESKTOP_VIEWS} view={view} onViewChange={onViewChange} />
@@ -89,9 +105,6 @@ export function TopBar({
           <AddEventButton onClick={onAddEvent} label="＋ Add Event" />
 
           <SettingsLink />
-
-          <WeatherWidget />
-          <Clock />
         </div>
       </div>
 
