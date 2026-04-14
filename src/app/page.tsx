@@ -9,6 +9,7 @@ import { DayView } from '@/components/calendar/DayView'
 import { AgendaSidebar } from '@/components/calendar/AgendaSidebar'
 import { EventModal } from '@/components/calendar/EventModal'
 import { EventDetailModal } from '@/components/calendar/EventDetailModal'
+import { MobileDayDrawer } from '@/components/calendar/MobileDayDrawer'
 import { useCalendarNavigation } from '@/hooks/useCalendarNavigation'
 import { useEventFilters } from '@/hooks/useEventFilters'
 import { useCalendarEvents } from '@/hooks/useCalendarEvents'
@@ -48,6 +49,7 @@ export default function CalendarPage() {
   const [dragTimeRange, setDragTimeRange] = useState<{ startTime: string; endTime: string } | null>(null)
   const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
 
   // Apply search filter on top of member/type filters
   const displayEvents = searchQuery.trim()
@@ -78,7 +80,7 @@ export default function CalendarPage() {
         case 'd': changeView('day'); break
         case '/': {
           e.preventDefault()
-          const searchInput = document.querySelector<HTMLInputElement>('input[placeholder="Search events..."]')
+          const searchInput = document.querySelector<HTMLInputElement>('input[placeholder="Search"]')
           searchInput?.focus()
           break
         }
@@ -89,9 +91,11 @@ export default function CalendarPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [goPrev, goNext, goToday, changeView])
 
+  // Selecting a date (month grid or mini-calendar) updates the sidebar.
+  // On mobile, also opens the day drawer.
   function handleSelectDate(date: Date) {
     selectDate(date)
-    changeView('day')
+    setMobileDrawerOpen(true)
   }
 
   function handleAddEvent() {
@@ -191,14 +195,17 @@ export default function CalendarPage() {
       )}
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <Sidebar
-          familyMembers={familyMembers}
-          calTypes={calTypes}
-          selectedDate={selectedDate}
-          onToggleMember={toggleMember}
-          onToggleCalType={toggleCalType}
-          onSelectDate={handleSelectDate}
-        />
+        {/* Left sidebar — hidden on mobile */}
+        <div className="hidden md:flex">
+          <Sidebar
+            familyMembers={familyMembers}
+            calTypes={calTypes}
+            selectedDate={selectedDate}
+            onToggleMember={toggleMember}
+            onToggleCalType={toggleCalType}
+            onSelectDate={handleSelectDate}
+          />
+        </div>
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {view === 'month' && (
@@ -228,12 +235,24 @@ export default function CalendarPage() {
           )}
         </div>
 
-        <AgendaSidebar
-          selectedDate={selectedDate}
-          events={displayEvents}
-          onEventClick={handleEventClick}
-        />
+        {/* Right agenda sidebar — hidden on mobile */}
+        <div className="hidden md:flex">
+          <AgendaSidebar
+            selectedDate={selectedDate}
+            events={displayEvents}
+            onEventClick={handleEventClick}
+          />
+        </div>
       </div>
+
+      {/* Mobile day drawer — slides up on day tap, invisible on desktop via CSS */}
+      <MobileDayDrawer
+        open={mobileDrawerOpen}
+        date={selectedDate}
+        events={displayEvents}
+        onClose={() => setMobileDrawerOpen(false)}
+        onEventClick={handleEventClick}
+      />
 
       <EventModal
         open={modalOpen}

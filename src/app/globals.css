@@ -42,6 +42,17 @@ body {
   overflow: hidden;
 }
 
+/* On mobile, use dynamic viewport height so the browser chrome doesn't
+   clip the layout when the address bar appears/disappears */
+@supports (height: 100dvh) {
+  @media (max-width: 767px) {
+    html,
+    body {
+      height: 100dvh;
+    }
+  }
+}
+
 body {
   font-family: 'DM Sans', sans-serif;
   background: var(--bg);

@@ -1,9 +1,12 @@
 'use client'
 
+import { useRef, useState, useEffect } from 'react'
 import { getMonthGridDates, sameDay, eventSpansDay, hexToRgba } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const EVENT_ROW_H = 22  // px per event pill + gap
+const DATE_NUM_H = 28   // px reserved for the day-number row
 
 interface MonthViewProps {
   currentDate: Date
@@ -24,6 +27,23 @@ export function MonthView({
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
   const gridDates = getMonthGridDates(year, month)
+  const numRows = gridDates.length / 7
+
+  const gridRef = useRef<HTMLDivElement>(null)
+  const [maxShow, setMaxShow] = useState(3)
+
+  useEffect(() => {
+    const el = gridRef.current
+    if (!el) return
+    const observer = new ResizeObserver(entries => {
+      const h = entries[0].contentRect.height
+      const rowH = h / numRows
+      const available = rowH - DATE_NUM_H
+      setMaxShow(Math.max(1, Math.floor(available / EVENT_ROW_H)))
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [numRows])
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -44,7 +64,11 @@ export function MonthView({
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-7 flex-1 overflow-hidden" style={{ gridTemplateRows: 'repeat(6, 1fr)' }}>
+      <div
+        ref={gridRef}
+        className="grid grid-cols-7 flex-1 overflow-hidden"
+        style={{ gridTemplateRows: `repeat(${numRows}, 1fr)` }}
+      >
         {gridDates.map((date, i) => {
           const isOtherMonth = date.getMonth() !== month
           const isToday = sameDay(date, today)
@@ -58,7 +82,6 @@ export function MonthView({
             e => !e.allDay && sameDay(e.start, e.end) && sameDay(e.start, date)
           )
           const dayEvents = [...dayAllDay, ...dayTimed]
-          const maxShow = 3
 
           return (
             <div

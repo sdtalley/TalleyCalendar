@@ -119,6 +119,8 @@ function parseVEvent(
   let dtend = ''
   let rrule = ''
   let isAllDay = false
+  let dtStartTzid: string | undefined
+  let dtEndTzid: string | undefined
 
   for (const line of lines) {
     if (line.startsWith('UID:')) uid = line.slice(4)
@@ -126,10 +128,14 @@ function parseVEvent(
     else if (line.startsWith('DESCRIPTION:')) description = line.slice(12)
     else if (line.startsWith('LOCATION:')) location = line.slice(9)
     else if (line.startsWith('DTSTART')) {
+      const tzidMatch = line.match(/TZID=([^:;]+)/)
+      dtStartTzid = tzidMatch ? tzidMatch[1] : undefined
       const value = line.split(':').pop() ?? ''
-      isAllDay = line.includes('VALUE=DATE:') || (!value.includes('T'))
+      isAllDay = line.includes('VALUE=DATE') || (!value.includes('T'))
       dtstart = value
     } else if (line.startsWith('DTEND')) {
+      const tzidMatch = line.match(/TZID=([^:;]+)/)
+      dtEndTzid = tzidMatch ? tzidMatch[1] : undefined
       dtend = line.split(':').pop() ?? ''
     } else if (line.startsWith('RRULE:')) {
       rrule = line.slice(6)
@@ -138,8 +144,8 @@ function parseVEvent(
 
   if (!dtstart) return null
 
-  const start = parseICalDate(dtstart)
-  const end = dtend ? parseICalDate(dtend) : new Date(start.getTime() + 3600_000)
+  const start = parseICalDate(dtstart, dtStartTzid)
+  const end = dtend ? parseICalDate(dtend, dtEndTzid) : new Date(start.getTime() + 3600_000)
 
   return {
     id: `apple-${account.id}-${uid}`,
@@ -165,11 +171,11 @@ function parseVEvent(
   }
 }
 
-function parseICalDate(str: string): Date {
-  // Format: 20260401T120000Z or 20260401
+function parseICalDate(str: string, tzid?: string): Date {
+  // Format: 20260401T120000Z, 20260401T120000 (floating or TZID), or 20260401 (all-day)
   const clean = str.replace(/[^0-9TZ]/g, '')
   if (clean.length === 8) {
-    // All-day: YYYYMMDD
+    // All-day: YYYYMMDD — keep as local midnight, no tz conversion
     return new Date(
       parseInt(clean.slice(0, 4)),
       parseInt(clean.slice(4, 6)) - 1,
@@ -185,7 +191,53 @@ function parseICalDate(str: string): Date {
   const s = parseInt(clean.slice(13, 15)) || 0
 
   if (clean.endsWith('Z')) {
+    // Explicit UTC — correct as-is
     return new Date(Date.UTC(y, m, d, h, min, s))
   }
+
+  if (tzid) {
+    // TZID-qualified local time (e.g. America/New_York).
+    // Vercel runs in UTC so new Date(y,m,d,h,min,s) would be wrong —
+    // use the Intl API to convert the named-timezone local time to UTC.
+    return parseDateInTimezone(y, m, d, h, min, s, tzid)
+  }
+
+  // Floating time — no timezone info, treat as-is
   return new Date(y, m, d, h, min, s)
+}
+
+/**
+ * Convert a broken-down "local time in tzid" to a UTC Date.
+ * Uses the Intl offset trick: probe a UTC date with the same numeric
+ * components, measure how far it drifts when formatted in the target
+ * timezone, then subtract that drift.
+ */
+function parseDateInTimezone(
+  y: number, m: number, d: number,
+  h: number, min: number, s: number,
+  tzid: string
+): Date {
+  // Step 1: treat the components as UTC to get a probe timestamp
+  const probe = new Date(Date.UTC(y, m, d, h, min, s))
+
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: tzid,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false,
+    })
+    const parts = fmt.formatToParts(probe)
+    const get = (type: string) => parseInt(parts.find(p => p.type === type)!.value)
+    // hour12:false can return 24 for midnight — clamp it
+    const tzH = get('hour') % 24
+    // Reconstruct what the probe looks like in the target timezone
+    const inTz = Date.UTC(get('year'), get('month') - 1, get('day'), tzH, get('minute'), get('second'))
+    // offsetMs = how far the probe is from what the timezone says it is
+    const offsetMs = probe.getTime() - inTz
+    return new Date(probe.getTime() + offsetMs)
+  } catch {
+    // Unknown timezone identifier — fall back to treating as UTC
+    return probe
+  }
 }
