@@ -158,6 +158,24 @@ Pi 3B/4/5 running:
 - [x] Mini calendar in sidebar for quick date navigation
 - [x] Daily notes / meal plan section (per-day notes in AgendaSidebar, saved to Redis)
 
+### Phase 2 — UI/UX Refinements ✅
+
+- [x] **Apple iCloud timezone fix** — extract `TZID=` from `DTSTART`/`DTEND`; use `Intl.DateTimeFormat` offset trick to convert named-timezone local times to UTC on Vercel's UTC server
+- [x] **Mobile PWA responsive layout** — single breakpoint (`< 768px`): sidebars hidden, TopBar collapses to 2 rows, day tap opens a bottom-sheet drawer (`MobileDayDrawer`) with that day's events; `100dvh` for browser-chrome stability
+- [x] **Right sidebar: Hours / Agenda toggle** — clicking a day auto-switches the right sidebar to Hours mode, which renders the full `DayView` (hour grid + drag-to-create) inside the 300px panel; Agenda mode shows the original 7-day upcoming list + daily notes
+- [x] **Desktop top bar: Day tab removed** — Day view now lives in the sidebar; desktop shows Month / Week only; mobile retains all three tabs
+- [x] **TopBar layout fix** — 3-column CSS grid (`1fr auto 1fr`) prevents left-nav and right-controls from ever colliding; weather + clock live in the centered auto column
+- [x] **Month view: dynamic event count** — `ResizeObserver` on the grid container computes `maxShow` from actual row height; shows more events on tall screens, fewer on compact ones
+- [x] **Month view: clicking a day stays in Month view** — day click (grid and mini-calendar) updates the right sidebar only; no longer forces a view switch
+- [x] **Month view: compact right-justified time** — timed events show `9a` / `3:30p` right-aligned in the pill (name truncates toward it); hidden on mobile so the name gets full width
+- [x] **Day/Week view: remove redundant time text** — time is implied by event position on the hour grid; time text inside blocks removed to recover vertical space on short events
+- [x] **Search bar cleanup** — magnifying glass icon removed; placeholder simplified to "Search"
+
+### Phase 2 — Polish Backlog
+
+- [ ] **Longpress / double-click to add event** — on mobile/touchscreen: long-press a month day cell opens the add-event modal pre-filled to that date; on desktop: double-click a day cell does the same
+- [ ] **Resizable sidebar** — drag handle on the inner border of the right sidebar allows horizontal resize (reasonable min/max bounds to keep the main calendar usable)
+
 ### Phase 2.5 — Event Write-Back (prerequisite for drag-to-reschedule)
 
 - [ ] Default write-back calendar per family member (configurable in Settings)
@@ -273,7 +291,7 @@ interface ConnectedAccount {
 - **Protocol**: CalDAV (WebDAV extension) via `tsdav` library
 - **Server**: `https://caldav.icloud.com`
 - **Flow**: User enters iCloud email + app-specific password in Settings UI → app tests connection server-side (credentials never sent to client) → on success, discovers calendars via CalDAV PROPFIND → saves credentials to Redis
-- **iCal parsing**: Custom RFC 5545 parser handles line unfolding, VTIMEZONE vs VEVENT scoping, all-day vs timed events, recurrence rules
+- **iCal parsing**: Custom RFC 5545 parser handles line unfolding, VTIMEZONE vs VEVENT scoping, all-day vs timed events, recurrence rules; `TZID=`-qualified `DTSTART`/`DTEND` values are converted to UTC via the `Intl.DateTimeFormat` offset trick (critical on Vercel which runs in UTC)
 - **Multiple users**: Each family member can add their own Apple account (credentials stored per-account in Redis, not in `.env`)
 - **Gotcha**: Credentials can't be validated until we try to connect. The UI must test on save and show clear success/failure. If Apple revokes the app-specific password, the account status changes to `reauth_needed`
 
@@ -335,10 +353,11 @@ TalleyCalendar/
 │   │           └── verify-pin/route.ts       ← GET (PIN required?), POST (verify PIN)
 │   ├── components/
 │   │   ├── calendar/
-│   │   │   ├── MonthView.tsx         ← month grid with all-day banners
+│   │   │   ├── MonthView.tsx         ← month grid; dynamic event count (ResizeObserver); compact right-justified times
 │   │   │   ├── WeekView.tsx          ← week grid with all-day section + drag-to-create
-│   │   │   ├── DayView.tsx           ← day timeline with all-day section + drag-to-create
-│   │   │   ├── AgendaSidebar.tsx     ← selected day + 6 days upcoming + daily notes
+│   │   │   ├── DayView.tsx           ← day timeline; supports hideHeader prop for sidebar embedding
+│   │   │   ├── AgendaSidebar.tsx     ← Hours/Agenda toggle; Hours mode embeds DayView; Agenda shows 7-day list + notes
+│   │   │   ├── MobileDayDrawer.tsx   ← bottom-sheet drawer shown on mobile when a day is tapped
 │   │   │   ├── MiniCalendar.tsx      ← compact month calendar for sidebar navigation
 │   │   │   ├── EventModal.tsx        ← quick-add new event (supports drag pre-fill)
 │   │   │   └── EventDetailModal.tsx  ← view event details (click any event)
@@ -347,8 +366,8 @@ TalleyCalendar/
 │   │   │   ├── AccountList.tsx       ← list connected accounts per member
 │   │   │   └── AddAccountFlow.tsx    ← provider picker + OAuth redirect / Apple form
 │   │   └── layout/
-│   │       ├── TopBar.tsx            ← nav, view toggle, add event, settings gear, weather
-│   │       ├── Sidebar.tsx           ← family member + calendar type toggles
+│   │       ├── TopBar.tsx            ← 3-column grid layout; desktop: Month/Week only; mobile: 2-row with all 3 views
+│   │       ├── Sidebar.tsx           ← family member + calendar type toggles (hidden on mobile)
 │   │       ├── Clock.tsx             ← live clock display
 │   │       └── WeatherWidget.tsx     ← current weather in top bar
 │   ├── hooks/
@@ -361,7 +380,7 @@ TalleyCalendar/
 │       ├── oauth-state.ts            ← HMAC-signed OAuth state + one-time nonce
 │       ├── redis.ts                  ← Upstash Redis client + typed helpers (includes daily notes)
 │       ├── sampleData.ts             ← sample events for demo/no-account-connected fallback
-│       ├── utils.ts                  ← date helpers, formatters, eventSpansDay
+│       ├── utils.ts                  ← date helpers, formatters (formatTime, formatTimeCompact), eventSpansDay
 │       └── calendar/
 │           ├── types.ts              ← CalendarEvent, ConnectedAccount, FamilyMember, AppSettings
 │           ├── google.ts             ← Google Calendar API client (token refresh, fetch)
