@@ -68,12 +68,21 @@ export function hexToRgba(hex: string, opacity: number): string {
   return `rgba(${r},${g},${b},${opacity})`
 }
 
-/** Returns true if an event overlaps with a given calendar day */
+/** Returns true if an event overlaps with a given calendar day.
+ *  Pass allDay=true for all-day events so UTC day boundaries are used,
+ *  avoiding timezone-induced day-shift (e.g. UTC midnight → prev day local). */
 export function eventSpansDay(
   eventStart: Date,
   eventEnd: Date,
-  day: Date
+  day: Date,
+  allDay = false
 ): boolean {
+  if (allDay) {
+    // All-day event dates are stored as UTC midnight; compare against UTC day boundaries
+    const dayUTC = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate())
+    const dayEndUTC = dayUTC + 86_400_000
+    return eventStart.getTime() < dayEndUTC && eventEnd.getTime() > dayUTC
+  }
   const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate())
   const dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1)
   return eventStart < dayEnd && eventEnd > dayStart

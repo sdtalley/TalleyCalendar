@@ -103,7 +103,7 @@ export function AgendaSidebar({ selectedDate, events, onEventClick, onDragCreate
     .map(d => ({
       date: d,
       events: events
-        .filter(e => eventSpansDay(e.start, e.end, d))
+        .filter(e => eventSpansDay(e.start, e.end, d, e.allDay))
         .sort((a, b) => {
           if (a.allDay !== b.allDay) return a.allDay ? -1 : 1
           return a.start.getTime() - b.start.getTime()

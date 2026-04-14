@@ -30,7 +30,7 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate }: We
 
   // Group all-day events per day for the week
   const allDayByDay = weekDates.map(day =>
-    allDayEvents.filter(e => eventSpansDay(e.start, e.end, day))
+    allDayEvents.filter(e => eventSpansDay(e.start, e.end, day, e.allDay))
   )
   const maxAllDay = Math.max(0, ...allDayByDay.map(d => d.length))
 

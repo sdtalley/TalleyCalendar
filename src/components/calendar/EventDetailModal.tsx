@@ -10,12 +10,14 @@ interface EventDetailModalProps {
   onClose: () => void
 }
 
-function formatDateLong(d: Date): string {
+function formatDateLong(d: Date, allDay = false): string {
   return d.toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
     year: 'numeric',
+    // All-day event dates are stored as UTC midnight; force UTC to get correct calendar date
+    ...(allDay && { timeZone: 'UTC' }),
   })
 }
 
@@ -44,10 +46,14 @@ export function EventDetailModal({ event, familyMembers, onClose }: EventDetailM
   if (!event) return null
 
   const member = familyMembers.find(m => m.id === event.familyMemberId)
-  const sameDate =
+  // For all-day events the end is exclusive (Outlook/Google convention: end = next day midnight)
+  // so a single-day all-day event has end - start = exactly 1 day
+  const allDaySingleDay = event.allDay && event.end.getTime() - event.start.getTime() <= 86_400_000
+  const sameDate = !event.allDay && (
     event.start.getFullYear() === event.end.getFullYear() &&
     event.start.getMonth() === event.end.getMonth() &&
     event.start.getDate() === event.end.getDate()
+  )
 
   return (
     <div
@@ -116,8 +122,8 @@ export function EventDetailModal({ event, familyMembers, onClose }: EventDetailM
           <DetailRow label="When">
             {event.allDay ? (
               <span>
-                {formatDateLong(event.start)}
-                {!sameDate && ` — ${formatDateLong(event.end)}`}
+                {formatDateLong(event.start, true)}
+                {!allDaySingleDay && ` — ${formatDateLong(new Date(event.end.getTime() - 86_400_000), true)}`}
                 <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full"
                   style={{ background: 'var(--surface2)', color: 'var(--text-dim)' }}>
                   All day

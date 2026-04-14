@@ -83,7 +83,7 @@ export function MonthView({
 
           // Split into all-day/multi-day vs timed events
           const dayAllDay = events.filter(
-            e => (e.allDay || !sameDay(e.start, e.end)) && eventSpansDay(e.start, e.end, date)
+            e => (e.allDay || !sameDay(e.start, e.end)) && eventSpansDay(e.start, e.end, date, e.allDay)
           )
           const dayTimed = events.filter(
             e => !e.allDay && sameDay(e.start, e.end) && sameDay(e.start, date)

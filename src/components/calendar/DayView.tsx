@@ -33,7 +33,7 @@ export function DayView({ currentDate, events, onEventClick, onDragCreate, hideH
 
   // Split events
   const allDayEvents = events.filter(
-    e => (e.allDay || !sameDay(e.start, e.end)) && eventSpansDay(e.start, e.end, currentDate)
+    e => (e.allDay || !sameDay(e.start, e.end)) && eventSpansDay(e.start, e.end, currentDate, e.allDay)
   )
   const timedEvents = events.filter(
     e => !e.allDay && sameDay(e.start, e.end) && sameDay(e.start, currentDate)

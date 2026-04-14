@@ -13,7 +13,7 @@ interface MobileDayDrawerProps {
 
 export function MobileDayDrawer({ open, date, events, onClose, onEventClick }: MobileDayDrawerProps) {
   const dayEvents = events
-    .filter(e => eventSpansDay(e.start, e.end, date))
+    .filter(e => eventSpansDay(e.start, e.end, date, e.allDay))
     .sort((a, b) => {
       if (a.allDay !== b.allDay) return a.allDay ? -1 : 1
       return a.start.getTime() - b.start.getTime()
