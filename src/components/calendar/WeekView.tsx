@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { getWeekDates, sameDay, eventSpansDay, formatTime, hexToRgba } from '@/lib/utils'
+import { getWeekDates, sameDay, eventSpansDay, hexToRgba } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
@@ -271,9 +271,6 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate }: We
                     }}
                   >
                     <div>{ev.title}</div>
-                    <div className="font-mono text-[10px] opacity-80">
-                      {formatTime(ev.start)}
-                    </div>
                   </button>
                 )
               })}

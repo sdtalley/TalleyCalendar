@@ -228,9 +228,6 @@ export function DayView({ currentDate, events, onEventClick, onDragCreate, hideH
                 onMouseLeave={e => (e.currentTarget.style.filter = '')}
               >
                 <div className="font-semibold truncate">{ev.title}</div>
-                <div className="font-mono text-[11px] opacity-80 mt-0.5">
-                  {formatTime(ev.start)} – {formatTime(ev.end)}
-                </div>
               </button>
             )
           })}
