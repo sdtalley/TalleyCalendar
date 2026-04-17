@@ -67,7 +67,7 @@ export function useCalendarEvents(currentDate: Date): UseCalendarEventsResult {
   // ── evict months too far from the current view ──────────────────────────
 
   const evict = useCallback((anchor: Date) => {
-    for (const key of cache.current.keys()) {
+    for (const key of Array.from(cache.current.keys())) {
       const [yr, mo] = key.split('-').map(Number)
       const dist = Math.abs((yr - anchor.getFullYear()) * 12 + (mo - 1 - anchor.getMonth()))
       if (dist > EVICT_MONTHS) cache.current.delete(key)
