@@ -25,7 +25,7 @@ export default function CalendarPage() {
   useScreenDim()
 
   // Fetch real events from connected accounts
-  const { events: liveEvents, members: liveMembers, loading, error: calError } = useCalendarEvents()
+  const { events: liveEvents, members: liveMembers, loading, error: calError } = useCalendarEvents(currentDate)
 
   // Sample events as fallback when no accounts connected
   const [sampleEvents] = useState<CalendarEvent[]>(() => generateSampleEvents())

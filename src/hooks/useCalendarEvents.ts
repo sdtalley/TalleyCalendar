@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { CalendarEvent, FamilyMember } from '@/lib/calendar/types'
 
 const DEFAULT_REFRESH_INTERVAL = 300_000 // 5 minutes
+const MONTH_BUFFER = 1 // months on each side of currentDate to load
 
 interface UseCalendarEventsResult {
   events: CalendarEvent[]
@@ -13,20 +14,31 @@ interface UseCalendarEventsResult {
   refresh: () => Promise<void>
 }
 
-export function useCalendarEvents(): UseCalendarEventsResult {
+function windowFor(date: Date): { start: Date; end: Date } {
+  return {
+    start: new Date(date.getFullYear(), date.getMonth() - MONTH_BUFFER, 1),
+    end: new Date(date.getFullYear(), date.getMonth() + MONTH_BUFFER + 1, 0),
+  }
+}
+
+export function useCalendarEvents(currentDate: Date): UseCalendarEventsResult {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [members, setMembers] = useState<FamilyMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const loadedRange = useRef<{ start: Date; end: Date } | null>(null)
+  const currentDateRef = useRef(currentDate)
   const intervalRef = useRef<ReturnType<typeof setInterval>>()
 
-  const fetchEvents = useCallback(async () => {
-    try {
-      // Fetch current month ± buffer
-      const now = new Date()
-      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-      const end = new Date(now.getFullYear(), now.getMonth() + 2, 0)
+  // Keep ref in sync so the polling interval always uses the latest currentDate
+  useEffect(() => {
+    currentDateRef.current = currentDate
+  })
 
+  const fetchEvents = useCallback(async (targetDate: Date) => {
+    const { start, end } = windowFor(targetDate)
+
+    try {
       const [calRes, memberRes] = await Promise.all([
         fetch(`/api/calendars?start=${start.toISOString()}&end=${end.toISOString()}`),
         fetch('/api/family'),
@@ -34,13 +46,13 @@ export function useCalendarEvents(): UseCalendarEventsResult {
 
       if (calRes.ok) {
         const data = await calRes.json()
-        // Rehydrate Date objects from JSON strings
         const hydrated = (data.events ?? []).map((e: CalendarEvent) => ({
           ...e,
           start: new Date(e.start as unknown as string),
           end: new Date(e.end as unknown as string),
         }))
         setEvents(hydrated)
+        loadedRange.current = { start, end }
         setError(data.errors ? `${data.errors.length} account(s) had errors` : null)
       } else {
         setError('Failed to fetch calendar events')
@@ -56,15 +68,25 @@ export function useCalendarEvents(): UseCalendarEventsResult {
     }
   }, [])
 
+  // Fetch on mount and whenever currentDate navigates outside the loaded window
   useEffect(() => {
-    fetchEvents()
+    const range = loadedRange.current
+    if (!range || currentDate < range.start || currentDate > range.end) {
+      fetchEvents(currentDate)
+    }
+  }, [currentDate, fetchEvents])
 
-    // Set up polling
-    intervalRef.current = setInterval(fetchEvents, DEFAULT_REFRESH_INTERVAL)
+  // Polling interval — always refreshes whatever window is currently visible
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      fetchEvents(currentDateRef.current)
+    }, DEFAULT_REFRESH_INTERVAL)
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
   }, [fetchEvents])
 
-  return { events, members, loading, error, refresh: fetchEvents }
+  const refresh = useCallback(() => fetchEvents(currentDateRef.current), [fetchEvents])
+
+  return { events, members, loading, error, refresh }
 }
