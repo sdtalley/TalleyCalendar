@@ -94,18 +94,8 @@ export async function fetchGoogleEvents(
     const data = await res.json()
     for (const item of data.items ?? []) {
       const isAllDay = !!item.start?.date
-      let start: Date
-      let end: Date
-      if (isAllDay) {
-        // Date-only strings like "2026-04-23" are treated as UTC by JS, shifting the day west of UTC
-        const [sy, sm, sd] = (item.start.date as string).split('-').map(Number)
-        start = new Date(sy, sm - 1, sd)
-        const [ey, em, ed] = (item.end.date as string).split('-').map(Number)
-        end = new Date(ey, em - 1, ed)
-      } else {
-        start = new Date(item.start?.dateTime)
-        end = new Date(item.end?.dateTime)
-      }
+      const start = new Date(item.start?.dateTime ?? item.start?.date)
+      const end = new Date(item.end?.dateTime ?? item.end?.date)
 
       events.push({
         id: `google-${account.id}-${item.id}`,
