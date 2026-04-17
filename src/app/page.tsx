@@ -25,7 +25,7 @@ export default function CalendarPage() {
   useScreenDim()
 
   // Fetch real events from connected accounts
-  const { events: liveEvents, members: liveMembers, loading, error: calError } = useCalendarEvents(currentDate)
+  const { events: liveEvents, members: liveMembers, loading, backgroundLoading, error: calError } = useCalendarEvents(currentDate)
 
   // Sample events as fallback when no accounts connected
   const [sampleEvents] = useState<CalendarEvent[]>(() => generateSampleEvents())
@@ -213,7 +213,8 @@ export default function CalendarPage() {
           />
         </div>
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+          {backgroundLoading && <div className="calendar-shimmer" />}
           {view === 'month' && (
             <MonthView
               currentDate={currentDate}
