@@ -8,17 +8,18 @@ const SCOPES = [
   'https://www.googleapis.com/auth/userinfo.email',
 ].join(' ')
 
-// GET /api/auth/google/connect?memberId=...&calendarType=...
+// GET /api/auth/google/connect?memberId=...&calendarType=...&reconnectAccountId=...
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
   const memberId = searchParams.get('memberId')
   const calendarType = searchParams.get('calendarType') ?? 'personal'
+  const reconnectAccountId = searchParams.get('reconnectAccountId') ?? undefined
 
   if (!memberId) {
     return NextResponse.json({ error: 'memberId is required' }, { status: 400 })
   }
 
-  const state = await createOAuthState(memberId, calendarType)
+  const state = await createOAuthState(memberId, calendarType, reconnectAccountId)
   const redirectUri = `${appUrl()}/api/auth/google`
 
   const params = new URLSearchParams({

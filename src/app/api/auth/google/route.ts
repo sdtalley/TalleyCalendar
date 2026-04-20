@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { saveAccount } from '@/lib/redis'
+import { saveAccount, getAccount, updateAccount } from '@/lib/redis'
 import { verifyOAuthState, appUrl } from '@/lib/oauth-state'
 import { discoverGoogleCalendars } from '@/lib/calendar/google'
 import type { ConnectedAccount, OAuthCredentials } from '@/lib/calendar/types'
@@ -63,6 +63,22 @@ export async function GET(req: NextRequest) {
     expiresAt: Date.now() + tokenData.expires_in * 1000,
   }
 
+  // Reconnect: update existing account's tokens, preserve all other settings
+  if (state.accountId) {
+    const existing = await getAccount(state.accountId)
+    if (existing) {
+      const updated = await updateAccount(state.accountId, {
+        auth,
+        status: 'connected',
+        lastSyncAt: new Date().toISOString(),
+      })
+      if (updated) {
+        return NextResponse.redirect(`${base}/settings?success=google_reconnect`)
+      }
+    }
+    // Fallthrough: account not found, treat as new connection
+  }
+
   const account: ConnectedAccount = {
     id: crypto.randomUUID(),
     provider: 'google',
@@ -78,7 +94,6 @@ export async function GET(req: NextRequest) {
 
   await saveAccount(account)
 
-  // Discover calendars
   try {
     const calendars = await discoverGoogleCalendars(account)
     account.enabledCalendars = calendars.map(c => ({ ...c, enabled: true }))

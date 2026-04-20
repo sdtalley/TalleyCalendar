@@ -8,6 +8,10 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const EVENT_ROW_H = 22  // px per event pill + gap
 const DATE_NUM_H = 28   // px reserved for the day-number row
 
+function toDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 interface MonthViewProps {
   currentDate: Date
   selectedDate: Date
@@ -33,6 +37,17 @@ export function MonthView({
 
   const gridRef = useRef<HTMLDivElement>(null)
   const [maxShow, setMaxShow] = useState(3)
+  const [meals, setMeals] = useState<Record<string, string>>({})
+
+  // Fetch meals for the visible grid range
+  useEffect(() => {
+    const start = toDateKey(gridDates[0])
+    const end = toDateKey(gridDates[gridDates.length - 1])
+    fetch(`/api/meals?start=${start}&end=${end}`)
+      .then(r => r.json())
+      .then(data => setMeals(data))
+      .catch(() => {})
+  }, [year, month]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Long-press state (shared across cells — only one touch at a time)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -89,6 +104,8 @@ export function MonthView({
             e => !e.allDay && sameDay(e.start, e.end) && sameDay(e.start, date)
           )
           const dayEvents = [...dayAllDay, ...dayTimed]
+
+          const dinnerName = meals[toDateKey(date)] || ''
 
           return (
             <div
@@ -162,7 +179,7 @@ export function MonthView({
               </div>
 
               {/* Events */}
-              <div className="flex flex-col gap-[2px] mt-[2px] overflow-hidden flex-1">
+              <div className="flex flex-col gap-[2px] mt-[2px] overflow-hidden flex-1" style={{ paddingBottom: dinnerName ? 18 : 0 }}>
                 {dayEvents.slice(0, maxShow).map(ev => {
                   const isAllDayStyle = ev.allDay || !sameDay(ev.start, ev.end)
                   return (
@@ -211,6 +228,30 @@ export function MonthView({
                   </div>
                 )}
               </div>
+
+              {/* Dinner pill — pinned to bottom of cell */}
+              {dinnerName && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 2,
+                    left: 2,
+                    right: 2,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: '#f59e0b',
+                    background: 'rgba(245,158,11,0.15)',
+                    borderLeft: '3px solid #f59e0b',
+                    borderRadius: '0 3px 3px 0',
+                    padding: '1px 4px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {dinnerName}
+                </div>
+              )}
             </div>
           )
         })}

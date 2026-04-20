@@ -7,6 +7,10 @@ import type { CalendarEvent } from '@/lib/calendar/types'
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const HOUR_HEIGHT = 60 // px per hour
 
+function toDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 interface WeekViewProps {
   currentDate: Date
   events: CalendarEvent[]
@@ -33,6 +37,18 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate }: We
     allDayEvents.filter(e => eventSpansDay(e.start, e.end, day, e.allDay))
   )
   const maxAllDay = Math.max(0, ...allDayByDay.map(d => d.length))
+
+  const [meals, setMeals] = useState<Record<string, string>>({})
+
+  // Fetch meals for visible week
+  useEffect(() => {
+    const start = toDateKey(weekDates[0])
+    const end = toDateKey(weekDates[6])
+    fetch(`/api/meals?start=${start}&end=${end}`)
+      .then(r => r.json())
+      .then(data => setMeals(data))
+      .catch(() => {})
+  }, [weekDates[0].toISOString()]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Drag-to-create state
   const [dragDayIndex, setDragDayIndex] = useState<number | null>(null)
@@ -166,6 +182,47 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate }: We
           ))}
         </div>
       )}
+
+      {/* Dinner band row — always visible below all-day section */}
+      <div
+        className="flex-shrink-0 grid"
+        style={{
+          gridTemplateColumns: `60px repeat(7, 1fr)`,
+          borderBottom: '1px solid var(--border)',
+          background: 'var(--surface)',
+        }}
+      >
+        <div
+          className="font-mono text-[10px] text-right pr-2 flex items-center justify-end"
+          style={{ color: 'var(--text-faint)' }}
+        >
+          dinner
+        </div>
+        {weekDates.map((day, di) => {
+          const dinnerName = meals[toDateKey(day)] ?? ''
+          return (
+            <div
+              key={di}
+              className="py-1 px-[2px]"
+              style={{ borderLeft: '1px solid var(--border)', minHeight: 24 }}
+            >
+              {dinnerName && (
+                <div
+                  className="text-[10px] px-1.5 py-[1px] rounded font-semibold truncate"
+                  style={{
+                    background: 'rgba(245,158,11,0.15)',
+                    color: '#f59e0b',
+                    borderLeft: '3px solid #f59e0b',
+                    borderRadius: '0 3px 3px 0',
+                  }}
+                >
+                  {dinnerName}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
 
       {/* Scrollable body */}
       <div

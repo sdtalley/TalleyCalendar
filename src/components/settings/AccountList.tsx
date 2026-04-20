@@ -140,6 +140,15 @@ function AccountCard({
             <span className="w-2 h-2 rounded-full" style={{ background: status.color }} />
             {status.label}
           </span>
+          {account.status === 'reauth_needed' && account.provider !== 'apple' && (
+            <a
+              href={`/api/auth/${account.provider}/connect?memberId=${account.familyMemberId}&calendarType=${account.calendarType}&reconnectAccountId=${account.id}`}
+              className="settings-btn-ghost text-xs font-semibold"
+              style={{ color: '#fbbf24', border: '1px solid #fbbf2460', borderRadius: 6, padding: '2px 8px', textDecoration: 'none' }}
+            >
+              Reconnect
+            </a>
+          )}
           <button
             onClick={onRemove}
             className="settings-btn-ghost text-xs"

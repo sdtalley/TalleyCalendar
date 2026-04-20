@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
-import { Sidebar } from '@/components/layout/Sidebar'
+import { ListsPanel, MobileListsDrawer } from '@/components/lists/ListsPanel'
 import { MonthView } from '@/components/calendar/MonthView'
 import { WeekView } from '@/components/calendar/WeekView'
 import { DayView } from '@/components/calendar/DayView'
@@ -21,17 +21,13 @@ export default function CalendarPage() {
   const { currentDate, selectedDate, view, goToday, goPrev, goNext, selectDate, changeView } =
     useCalendarNavigation()
 
-  // Screen dimming for kiosk mode
   useScreenDim()
 
-  // Fetch real events from connected accounts
   const { events: liveEvents, members: liveMembers, loading, backgroundLoading, error: calError } = useCalendarEvents(currentDate)
 
-  // Sample events as fallback when no accounts connected
   const [sampleEvents] = useState<CalendarEvent[]>(() => generateSampleEvents())
   const [localEvents, setLocalEvents] = useState<CalendarEvent[]>([])
 
-  // Use live data if family members exist in Redis, otherwise show sample data
   const hasRealSetup = liveMembers.length > 0
   const baseEvents = hasRealSetup
     ? [...liveEvents, ...localEvents]
@@ -50,8 +46,8 @@ export default function CalendarPage() {
   const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  const [mobileListsOpen, setMobileListsOpen] = useState(false)
 
-  // Apply search filter on top of member/type filters
   const displayEvents = searchQuery.trim()
     ? visibleEvents.filter(e => {
         const q = searchQuery.toLowerCase()
@@ -63,7 +59,6 @@ export default function CalendarPage() {
       })
     : visibleEvents
 
-  // Keyboard shortcuts
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) {
@@ -91,8 +86,6 @@ export default function CalendarPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [goPrev, goNext, goToday, changeView])
 
-  // Selecting a date (month grid or mini-calendar) updates the sidebar.
-  // On mobile, also opens the day drawer.
   function handleSelectDate(date: Date) {
     selectDate(date)
     setMobileDrawerOpen(true)
@@ -155,7 +148,6 @@ export default function CalendarPage() {
     setDetailEvent(event)
   }
 
-  // Full-page loading state — no sample data flash
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
@@ -189,6 +181,11 @@ export default function CalendarPage() {
         onAddEvent={handleAddEvent}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        familyMembers={familyMembers}
+        calTypes={calTypes}
+        onToggleMember={toggleMember}
+        onToggleCalType={toggleCalType}
+        onOpenListsDrawer={() => setMobileListsOpen(true)}
       />
 
       {calError && (
@@ -201,16 +198,9 @@ export default function CalendarPage() {
       )}
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Left sidebar — hidden on mobile */}
+        {/* Lists panel — desktop only */}
         <div className="hidden md:flex">
-          <Sidebar
-            familyMembers={familyMembers}
-            calTypes={calTypes}
-            selectedDate={selectedDate}
-            onToggleMember={toggleMember}
-            onToggleCalType={toggleCalType}
-            onSelectDate={handleSelectDate}
-          />
+          <ListsPanel />
         </div>
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
@@ -243,7 +233,7 @@ export default function CalendarPage() {
           )}
         </div>
 
-        {/* Right agenda sidebar — hidden on mobile */}
+        {/* Right agenda sidebar — desktop only */}
         <div className="hidden md:flex">
           <AgendaSidebar
             selectedDate={selectedDate}
@@ -254,13 +244,18 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* Mobile day drawer — slides up on day tap, invisible on desktop via CSS */}
+      {/* Mobile drawers */}
       <MobileDayDrawer
         open={mobileDrawerOpen}
         date={selectedDate}
         events={displayEvents}
         onClose={() => setMobileDrawerOpen(false)}
         onEventClick={handleEventClick}
+      />
+
+      <MobileListsDrawer
+        open={mobileListsOpen}
+        onClose={() => setMobileListsOpen(false)}
       />
 
       <EventModal

@@ -79,6 +79,42 @@ Pi 3B/4/5 running:
 
 ---
 
+## UI Layout Architecture
+
+### Three-Panel Desktop Layout
+
+```
+┌─────────────────┬──────────────────────────┬─────────────────┐
+│   Lists Panel   │      Calendar (main)      │  Hours / Agenda │
+│  (resizable,    │    Month / Week view      │  (resizable,    │
+│   collapsible)  │                           │   collapsible)  │
+│                 │                           │                 │
+│  Meals          │                           │  Mini calendar  │
+│  Shopping       │                           │  Day timeline   │
+│  To-Do          │                           │  Event list     │
+└─────────────────┴──────────────────────────┴─────────────────┘
+```
+
+**Semantic reading direction**: Planning (left) → Overview (center) → Detail (right)
+
+### Panel Behavior
+- Both sidebars are **resizable** via drag handle and **collapsible** to a ~40px icon strip
+- Collapsed state is persisted in Redis settings per-device (or localStorage)
+- Default widths: Lists ~280px, Hours/Agenda ~300px
+
+### Filter Relocation (left sidebar removed)
+- **Family member toggles** → TopBar avatar chip buttons (colored dot + name, tap to toggle, dims when off)
+- **Calendar type filters** → "Filters" dropdown button in TopBar (used rarely; hidden until needed)
+- Left sidebar is fully retired; its space becomes the Lists panel
+
+### Mobile Layout
+- TopBar avatar chips remain visible (compact)
+- Lists panel → bottom drawer via a list/menu icon button (same pattern as MobileDayDrawer)
+- Hours/Agenda → bottom sheet on day tap (unchanged)
+- Both sidebars hidden; full-width calendar preserved
+
+---
+
 ## Tech Stack
 
 | Layer | Technology | Rationale |
@@ -175,14 +211,34 @@ Pi 3B/4/5 running:
 
 - [x] **Longpress / double-click to add event** — double-click a month day cell (desktop) or long-press 600ms (mobile/touchscreen) opens the add-event modal pre-filled to that date; synthetic post-longpress click suppressed so day-select doesn't also fire
 - [x] **Resizable sidebar** — drag handle on left border of right sidebar resizes between 240px–520px; accent pill indicator on hover; mouse and touch both supported
+- [x] **Calendar event prefetch + SWR cache** — `useCalendarEvents` now accepts `currentDate` and maintains a per-month cache keyed by `"YYYY-MM"`; on navigation to a cached month events display instantly with a silent SWR revalidation in the background; cache misses show a faint shimmer sweep on the calendar grid; after initial load the next month forward is immediately prefetched; subsequent navigations trigger a directional prefetch (500ms debounce) for the predicted next month; cache entries evict when more than 3 months from the current view; the 5-min polling interval always refreshes the currently visible window
 
-### Phase 2.5 — Event Write-Back (prerequisite for drag-to-reschedule)
+### Phase 2.5 — Layout Redesign + Event Write-Back + Meals
 
-- [ ] Default write-back calendar per family member (configurable in Settings)
+#### Layout Redesign ✅
+- [x] **Remove left sidebar** (`Sidebar.tsx`) — retired; `ListsPanel` occupies left slot
+- [x] **TopBar filter chips** — family member avatar chips (colored, tap-to-toggle, dim when off) inline in TopBar
+- [x] **TopBar filter dropdown** — "Filters" button for calendar type toggles (Personal/Work/Kids/Shared)
+- [x] **Lists panel** (left side, resizable 220–520px + collapsible to 44px icon strip) — shell with Meals / Shopping / To-Do tabs; Shopping and To-Do are stubs
+- [x] **Mobile Lists drawer** — `MobileListsDrawer` bottom sheet via ☰ button in mobile TopBar row 2
+
+#### Google OAuth Reconnect Fix ✅
+- [x] **Publish Google OAuth app** — moved consent screen from "Testing" to "Published" in Google Cloud Console; eliminates 7-day refresh token expiry
+- [x] **Reconnect button UI** — in `AccountList.tsx`, amber "Reconnect" button shown when `status === 'reauth_needed'` (Google + Outlook); re-triggers OAuth via `?reconnectAccountId=` param; callback updates only tokens + status, preserving label/calendarType/enabledCalendars
+
+#### Event Write-Back
+- [ ] **`defaultWriteCalendarId` per account** — add field to `ConnectedAccount`; shown in account settings as dropdown of that account's enabled calendars; falls back to `"primary"` for Google
 - [ ] `POST /api/events` — create event on provider (Google Calendar API, MS Graph)
 - [ ] `PATCH /api/events/:id` — update event on provider (move, resize, rename)
 - [ ] `DELETE /api/events/:id` — delete event on provider
-- [ ] Drag-to-reschedule — drag existing events in Week/Day views to new times (requires write-back to update provider)
+- [ ] **Drag-to-reschedule** — drag existing events in Week/Day views to new times (requires write-back)
+
+#### Meals Feature ✅
+- [x] **`meal:{YYYY-MM-DD}` Redis key** — stores `{ name: string }` JSON (structured for future ingredient expansion)
+- [x] **`GET/PUT /api/meals`** — read/write meal plan entries by date or week range
+- [x] **Dinner pill rendering** — pinned amber pill at bottom of each day cell in Month view (amber left-border style); pinned "Dinner" band row always visible below all-day section in Week view
+- [x] **Meals tab in Lists panel** — week-by-week planner (Sun–Sat), inline click-to-edit, week navigation arrows, auto-save on blur/Enter, today highlighted with accent color
+- [x] **`MealPlanPanel.tsx`** — standalone component inside `ListsPanel.tsx` shell; `MobileListsDrawer` also renders it on mobile
 
 ### Phase 3 — Home Assistant Integration
 
@@ -197,7 +253,10 @@ Pi 3B/4/5 running:
 - [ ] Flier/photo scan → auto-create event (OCR + LLM parsing via phone camera)
 - [ ] Natural language event creation ("Soccer practice every Tuesday 4pm")
 - [ ] Family member location awareness (ETA to home)
-- [ ] Shared family to-do list / grocery list
+- [ ] **Shopping list** — Lists panel Shopping tab; `shopping:{YYYY-WW}` Redis key; manual add + auto-populate from meal plan ingredients
+- [ ] **To-Do list** — Lists panel To-Do tab; `todo:{YYYY-MM-DD}` Redis key
+- [ ] **Meal ingredients** — expand `meal:{YYYY-MM-DD}` to `{ name, ingredients: Ingredient[] }`; ingredients sync to Shopping list
+- [ ] **AI meal suggestions** — suggest dinners based on history, season, or prompt
 - [ ] Birthday/anniversary reminders with countdown
 - [ ] School calendar import (ICS bulk import)
 - [ ] Notification system (push to phones for upcoming events)
@@ -222,7 +281,8 @@ Redis key structure:
   accounts:byMember:{memberId}       → JSON array of accountId strings
   settings                           → JSON AppSettings object
   oauth:nonce:{nonce}                → one-time nonce for OAuth CSRF (10-min TTL)
-  note:{YYYY-MM-DD}                 → string (daily notes / meal plan)
+  note:{YYYY-MM-DD}                  → string (daily notes)
+  meal:{YYYY-MM-DD}                  → JSON MealPlan object { name: string } (expandable to ingredients)
 ```
 
 ```typescript
@@ -245,6 +305,8 @@ interface ConnectedAccount {
     name: string                      // display name from provider
     enabled: boolean
   }[]
+
+  defaultWriteCalendarId: string      // which sub-calendar to write new events to; falls back to "primary"
 
   status: 'connected' | 'error' | 'reauth_needed'
   connectedAt: string                 // ISO date
@@ -346,6 +408,8 @@ TalleyCalendar/
 │   │       │   └── route.ts                  ← GET aggregated events from all accounts
 │   │       ├── notes/
 │   │       │   └── route.ts                  ← GET/PUT daily notes per date
+│   │       ├── meals/
+│   │       │   └── route.ts                  ← GET/PUT meal plan entries by date or week range
 │   │       ├── weather/
 │   │       │   └── route.ts                  ← GET current weather (Open-Meteo proxy)
 │   │       └── settings/
@@ -353,25 +417,28 @@ TalleyCalendar/
 │   │           └── verify-pin/route.ts       ← GET (PIN required?), POST (verify PIN)
 │   ├── components/
 │   │   ├── calendar/
-│   │   │   ├── MonthView.tsx         ← month grid; dynamic event count (ResizeObserver); compact right-justified times
-│   │   │   ├── WeekView.tsx          ← week grid with all-day section + drag-to-create
+│   │   │   ├── MonthView.tsx         ← month grid; dynamic event count (ResizeObserver); compact right-justified times; dinner pill pinned at bottom of day cells
+│   │   │   ├── WeekView.tsx          ← week grid with all-day section + drag-to-create; dinner band row pinned below all-day section
 │   │   │   ├── DayView.tsx           ← day timeline; supports hideHeader prop for sidebar embedding
-│   │   │   ├── AgendaSidebar.tsx     ← Hours/Agenda toggle; Hours mode embeds DayView; Agenda shows 7-day list + notes
+│   │   │   ├── AgendaSidebar.tsx     ← Hours/Agenda toggle; Hours mode embeds DayView; Agenda shows 7-day list + notes (right panel)
 │   │   │   ├── MobileDayDrawer.tsx   ← bottom-sheet drawer shown on mobile when a day is tapped
 │   │   │   ├── MiniCalendar.tsx      ← compact month calendar for sidebar navigation
 │   │   │   ├── EventModal.tsx        ← quick-add new event (supports drag pre-fill)
 │   │   │   └── EventDetailModal.tsx  ← view event details (click any event)
+│   │   ├── lists/
+│   │   │   ├── ListsPanel.tsx        ← left panel shell + MobileListsDrawer; Meals/Shopping/To-Do tabs; resizable + collapsible
+│   │   │   └── MealPlanPanel.tsx     ← week-by-week meal planner; inline click-to-edit; week navigation; today highlight
 │   │   ├── settings/
 │   │   │   ├── FamilyMemberList.tsx  ← manage family members (add/edit/remove)
-│   │   │   ├── AccountList.tsx       ← list connected accounts per member
+│   │   │   ├── AccountList.tsx       ← list connected accounts per member; amber Reconnect button when reauth_needed (Google/Outlook)
 │   │   │   └── AddAccountFlow.tsx    ← provider picker + OAuth redirect / Apple form
 │   │   └── layout/
-│   │       ├── TopBar.tsx            ← 3-column grid layout; desktop: Month/Week only; mobile: 2-row with all 3 views
-│   │       ├── Sidebar.tsx           ← family member + calendar type toggles (hidden on mobile)
+│   │       ├── TopBar.tsx            ← 3-column grid; family member chip toggles; Filters dropdown; mobile ☰ Lists button
+│   │       ├── Sidebar.tsx           ← RETIRED — file kept for reference; no longer rendered
 │   │       ├── Clock.tsx             ← live clock display
 │   │       └── WeatherWidget.tsx     ← current weather in top bar
 │   ├── hooks/
-│   │   ├── useCalendarEvents.ts      ← fetches /api/calendars + /api/family, 5-min poll
+│   │   ├── useCalendarEvents.ts      ← fetches /api/calendars + /api/family; per-month SWR cache, directional prefetch, shimmer on cold miss, 5-min poll
 │   │   ├── useCalendarNavigation.ts  ← view state, date navigation
 │   │   ├── useEventFilters.ts        ← family/type toggles via disabledMembers Set
 │   │   └── useScreenDim.ts           ← screen dimming based on schedule from Redis
@@ -521,6 +588,7 @@ interface ConnectedAccount {
     name: string
     enabled: boolean
   }[]
+  defaultWriteCalendarId: string     // target for new events; falls back to "primary"
   status: 'connected' | 'error' | 'reauth_needed'
   connectedAt: string
   lastSyncAt?: string
@@ -548,6 +616,12 @@ interface CalendarEvent {
     calendarName: string
     provider: CalendarProvider
   }
+}
+
+// ── Meal Plan (stored per-day in Redis, separate from CalendarEvents) ──
+interface MealPlan {
+  name: string                       // dinner name for that day
+  // future: servings?: number; notes?: string; ingredients?: Ingredient[]
 }
 
 // ── App Settings ──
@@ -700,7 +774,9 @@ Redis                               ├─ google.ts → Google Calendar API
 - [x] **Apple single-user limitation**: ~~One Apple account in .env~~ → **Per-user Apple credentials stored in Redis**, each family member connects their own.
 - [x] **Microsoft work accounts**: ~~Personal accounts only~~ → **Multitenant + personal** Azure app registration, supports both work (Entra ID) and personal accounts.
 - [x] **Settings access control**: ~~Should Settings require a PIN?~~ → **Yes**, optional numeric PIN gate implemented for kiosk mode.
-- [ ] **Event write-back**: When creating an event on the display, which calendar should it write to by default? Probably configurable per family member (default write-back calendar in Settings).
+- [x] **Event write-back**: When creating an event, which calendar does it write to? → **`defaultWriteCalendarId` per `ConnectedAccount`**, configurable in account settings UI as a dropdown of that account's enabled calendars; falls back to `"primary"`. No prompt at event creation time — keeps the flow simple.
+- [x] **UI layout**: Is the left sidebar worth the real estate? → **No.** Left sidebar retired. Family member toggles move to TopBar avatar chips; calendar type filters behind a TopBar dropdown. Left space becomes a resizable/collapsible **Lists panel** (Meals / Shopping / To-Do). Right sidebar stays as Hours/Agenda.
+- [x] **Dinner / Meals**: CalendarType or own data model? → **Own model.** `meal:{YYYY-MM-DD}` JSON in Redis, separate from the event system. Rendered as a pinned no-time amber pill at the bottom of day cells. Not a CalendarType.
 - [ ] **Sync frequency**: 5 minutes default — is this fast enough? Could use webhooks for Google/Outlook for near-real-time.
 - [ ] **Offline handling**: Should the app cache events locally (service worker) so it still shows data if internet drops?
 

@@ -6,20 +6,27 @@ const VALID_CALENDAR_TYPES = ['personal', 'work', 'kids', 'shared'] as const
 /**
  * Creates a signed, nonce-protected OAuth state parameter.
  * Stores the nonce in Redis with a 10-minute TTL.
+ * Pass reconnectAccountId to signal that the callback should update an
+ * existing account's tokens rather than create a new one.
  */
 export async function createOAuthState(
   memberId: string,
-  calendarType: string
+  calendarType: string,
+  reconnectAccountId?: string
 ): Promise<string> {
   const validType = VALID_CALENDAR_TYPES.includes(calendarType as typeof VALID_CALENDAR_TYPES[number])
     ? calendarType
     : 'personal'
 
   const nonce = crypto.randomUUID()
-  const payload = JSON.stringify({ memberId, calendarType: validType, nonce })
+  const payload = JSON.stringify({
+    memberId,
+    calendarType: validType,
+    nonce,
+    ...(reconnectAccountId ? { accountId: reconnectAccountId } : {}),
+  })
   const signature = sign(payload)
 
-  // Store nonce in Redis with 10-min TTL
   await redis.set(`oauth_nonce:${nonce}`, '1', { ex: 600 })
 
   return `${payload}.${signature}`
@@ -28,37 +35,39 @@ export async function createOAuthState(
 /**
  * Verifies and parses an OAuth state parameter.
  * Returns null if the signature is invalid or the nonce was already used.
+ * Returns accountId when the flow is a reconnect for an existing account.
  */
 export async function verifyOAuthState(
   state: string
-): Promise<{ memberId: string; calendarType: string } | null> {
+): Promise<{ memberId: string; calendarType: string; accountId?: string } | null> {
   const dotIdx = state.lastIndexOf('.')
   if (dotIdx === -1) return null
 
   const payload = state.slice(0, dotIdx)
   const signature = state.slice(dotIdx + 1)
 
-  // Verify HMAC signature
   if (signature !== sign(payload)) return null
 
-  let data: { memberId: string; calendarType: string; nonce: string }
+  let data: { memberId: string; calendarType: string; nonce: string; accountId?: string }
   try {
     data = JSON.parse(payload)
   } catch {
     return null
   }
 
-  // Verify and consume the nonce (one-time use)
   const nonceKey = `oauth_nonce:${data.nonce}`
   const existed = await redis.del(nonceKey)
   if (existed === 0) return null
 
-  // Validate calendarType
   if (!VALID_CALENDAR_TYPES.includes(data.calendarType as typeof VALID_CALENDAR_TYPES[number])) {
     return null
   }
 
-  return { memberId: data.memberId, calendarType: data.calendarType }
+  return {
+    memberId: data.memberId,
+    calendarType: data.calendarType,
+    ...(data.accountId ? { accountId: data.accountId } : {}),
+  }
 }
 
 function sign(payload: string): string {

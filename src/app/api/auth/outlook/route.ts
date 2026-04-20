@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { saveAccount } from '@/lib/redis'
+import { saveAccount, getAccount, updateAccount } from '@/lib/redis'
 import { verifyOAuthState, appUrl } from '@/lib/oauth-state'
 import { discoverOutlookCalendars } from '@/lib/calendar/outlook'
 import type { ConnectedAccount, OAuthCredentials } from '@/lib/calendar/types'
@@ -65,6 +65,22 @@ export async function GET(req: NextRequest) {
     accessToken: tokenData.access_token,
     refreshToken: tokenData.refresh_token,
     expiresAt: Date.now() + tokenData.expires_in * 1000,
+  }
+
+  // Reconnect: update existing account's tokens, preserve all other settings
+  if (state.accountId) {
+    const existing = await getAccount(state.accountId)
+    if (existing) {
+      const updated = await updateAccount(state.accountId, {
+        auth,
+        status: 'connected',
+        lastSyncAt: new Date().toISOString(),
+      })
+      if (updated) {
+        return NextResponse.redirect(`${base}/settings?success=outlook_reconnect`)
+      }
+    }
+    // Fallthrough: account not found, treat as new connection
   }
 
   const account: ConnectedAccount = {
