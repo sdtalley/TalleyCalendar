@@ -52,6 +52,12 @@ export function TopBar({
   onToggleCalType,
   onOpenListsDrawer,
 }: TopBarProps) {
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+
+  const anyFilterOff =
+    (familyMembers?.some(m => !m.enabled) ?? false) ||
+    (calTypes?.some(ct => !ct.enabled) ?? false)
+
   return (
     <header
       className="flex-shrink-0 z-10"
@@ -156,11 +162,39 @@ export function TopBar({
           </div>
         </div>
 
-        {/* Row 2: Today | view tabs | + Add | Lists | settings */}
+        {/* Row 2: Today | view tabs | Filters | Lists | + Add | settings */}
         <div className="flex items-center justify-between px-4 pb-2 gap-2">
           <TodayButton onClick={onToday} />
           <ViewToggle views={ALL_VIEWS} view={view} onViewChange={onViewChange} />
           <div className="flex items-center gap-2">
+            {/* Mobile Filters button — opens bottom sheet overlay */}
+            {familyMembers && familyMembers.length > 0 && (
+              <button
+                onClick={() => setMobileFiltersOpen(true)}
+                title="Filters"
+                className="relative w-9 h-9 flex items-center justify-center rounded-[8px] text-sm cursor-pointer transition-all duration-150"
+                style={{
+                  background: anyFilterOff ? 'var(--accent-glow)' : 'var(--surface2)',
+                  border: `1px solid ${anyFilterOff ? 'var(--accent)' : 'var(--border)'}`,
+                  color: anyFilterOff ? 'var(--accent)' : 'var(--text-dim)',
+                }}
+              >
+                ⊞
+                {anyFilterOff && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: 4,
+                      right: 4,
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: 'var(--accent)',
+                    }}
+                  />
+                )}
+              </button>
+            )}
             {onOpenListsDrawer && (
               <button
                 onClick={onOpenListsDrawer}
@@ -179,23 +213,175 @@ export function TopBar({
             <SettingsLink />
           </div>
         </div>
-
-        {/* Row 3: family member chips (compact, scrollable) */}
-        {familyMembers && familyMembers.length > 0 && onToggleMember && (
-          <div
-            className="flex items-center gap-2 px-4 pb-2 overflow-x-auto"
-            style={{ scrollbarWidth: 'none' }}
-          >
-            {familyMembers.map(m => (
-              <MemberChip key={m.id} member={m} onToggle={onToggleMember} compact />
-            ))}
-            {calTypes && onToggleCalType && (
-              <FiltersDropdown calTypes={calTypes} onToggleCalType={onToggleCalType} compact />
-            )}
-          </div>
-        )}
       </div>
+
+      {/* ── Mobile filters bottom sheet ── */}
+      {mobileFiltersOpen && familyMembers && onToggleMember && (
+        <MobileFiltersSheet
+          familyMembers={familyMembers}
+          calTypes={calTypes}
+          onToggleMember={onToggleMember}
+          onToggleCalType={onToggleCalType}
+          onClose={() => setMobileFiltersOpen(false)}
+        />
+      )}
     </header>
+  )
+}
+
+/* ── Mobile filters bottom sheet ── */
+
+function MobileFiltersSheet({
+  familyMembers,
+  calTypes,
+  onToggleMember,
+  onToggleCalType,
+  onClose,
+}: {
+  familyMembers: FamilyMemberUI[]
+  calTypes?: { id: string; name: string; enabled: boolean }[]
+  onToggleMember: (id: string) => void
+  onToggleCalType?: (id: string) => void
+  onClose: () => void
+}) {
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40 md:hidden"
+        style={{ background: 'rgba(0,0,0,0.5)' }}
+        onClick={onClose}
+      />
+
+      {/* Sheet */}
+      <div
+        className="fixed bottom-0 left-0 right-0 z-50 md:hidden flex flex-col"
+        style={{
+          background: 'var(--surface)',
+          borderTop: '1px solid var(--border)',
+          borderRadius: '16px 16px 0 0',
+          maxHeight: '60dvh',
+        }}
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+          <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 2 }} />
+        </div>
+
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-5 pb-3 flex-shrink-0"
+          style={{ borderBottom: '1px solid var(--border)' }}
+        >
+          <span className="font-semibold text-base" style={{ color: 'var(--text)' }}>
+            Filters
+          </span>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-[8px] border-none cursor-pointer text-lg"
+            style={{ background: 'var(--surface2)', color: 'var(--text-dim)' }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="overflow-y-auto px-5 py-4 flex flex-col gap-5">
+          {/* Family member toggles */}
+          <div>
+            <div
+              className="text-[11px] font-semibold uppercase tracking-wider mb-3"
+              style={{ color: 'var(--text-faint)' }}
+            >
+              Family
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {familyMembers.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => onToggleMember(m.id)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-full cursor-pointer transition-all duration-150"
+                  style={{
+                    background: m.enabled ? 'var(--surface2)' : 'transparent',
+                    border: `1px solid ${m.enabled ? m.color + '80' : 'var(--border)'}`,
+                    opacity: m.enabled ? 1 : 0.5,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      background: m.enabled ? m.color : 'var(--text-faint)',
+                      flexShrink: 0,
+                      display: 'inline-block',
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 500,
+                      color: m.enabled ? 'var(--text)' : 'var(--text-dim)',
+                    }}
+                  >
+                    {m.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Calendar type toggles */}
+          {calTypes && onToggleCalType && (
+            <div>
+              <div
+                className="text-[11px] font-semibold uppercase tracking-wider mb-3"
+                style={{ color: 'var(--text-faint)' }}
+              >
+                Calendar Type
+              </div>
+              <div className="flex flex-col gap-1">
+                {calTypes.map(ct => (
+                  <button
+                    key={ct.id}
+                    onClick={() => onToggleCalType(ct.id)}
+                    className="flex items-center gap-3 px-2 py-2.5 rounded-[8px] cursor-pointer text-left w-full transition-colors duration-100"
+                    style={{ background: 'transparent', border: 'none' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface2)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 5,
+                        background: ct.enabled ? 'var(--accent)' : 'transparent',
+                        border: ct.enabled ? '2px solid var(--accent)' : '2px solid var(--border)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        fontSize: 11,
+                        color: '#fff',
+                      }}
+                    >
+                      {ct.enabled && '✓'}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 15,
+                        color: ct.enabled ? 'var(--text)' : 'var(--text-dim)',
+                      }}
+                    >
+                      {ct.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   )
 }
 
