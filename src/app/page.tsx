@@ -50,6 +50,8 @@ export default function CalendarPage() {
   const [modalInitialDate, setModalInitialDate] = useState<Date | undefined>()
   const [dragTimeRange, setDragTimeRange] = useState<{ startTime: string; endTime: string } | null>(null)
   const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null)
+  // Month-drag reschedule: event being moved + target date (opens modal for confirmation)
+  const [pendingMonthReschedule, setPendingMonthReschedule] = useState<CalendarEvent | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [mobileListsOpen, setMobileListsOpen] = useState(false)
@@ -135,11 +137,61 @@ export default function CalendarPage() {
     setModalOpen(true)
   }
 
+  // Month-view drag to a new day — open EventModal pre-filled for confirmation
+  function handleMonthReschedule(event: CalendarEvent, newDate: Date) {
+    setPendingMonthReschedule(event)
+    setModalInitialDate(newDate)
+    setDragTimeRange({
+      startTime: `${String(event.start.getHours()).padStart(2, '0')}:${String(event.start.getMinutes()).padStart(2, '0')}`,
+      endTime: `${String(event.end.getHours()).padStart(2, '0')}:${String(event.end.getMinutes()).padStart(2, '0')}`,
+    })
+    setModalOpen(true)
+  }
+
   async function handleSaveEvent(draft: NewEventDraft) {
     const member = familyMembers.find(m => m.id === draft.familyMemberId)
     if (!member) return
 
-    // Optimistic local event while API call is in flight
+    // Month-drag reschedule: confirmed via modal → call PATCH
+    if (pendingMonthReschedule) {
+      const ev = pendingMonthReschedule
+      setPendingMonthReschedule(null)
+
+      const [sh, sm] = draft.startTime.split(':').map(Number)
+      const [eh, em] = draft.endTime.split(':').map(Number)
+      const [yr, mo, dy] = draft.date.split('-').map(Number)
+      const newStart = new Date(yr, mo - 1, dy, sh, sm)
+      const newEnd = new Date(yr, mo - 1, dy, eh, em)
+
+      setRescheduleOverrides(prev => new Map(prev).set(ev.id, { start: newStart, end: newEnd }))
+
+      if (ev.externalId) {
+        try {
+          const res = await fetch(`/api/events/${encodeURIComponent(ev.id)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              accountId: ev.accountId,
+              calendarId: ev.source.calendarId,
+              externalId: ev.externalId,
+              start: newStart.toISOString(),
+              end: newEnd.toISOString(),
+            }),
+          })
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}))
+            showWriteError(data.error ?? 'Failed to move event')
+            setRescheduleOverrides(prev => { const n = new Map(prev); n.delete(ev.id); return n })
+          }
+        } catch {
+          showWriteError('Failed to reach server — event not moved')
+          setRescheduleOverrides(prev => { const n = new Map(prev); n.delete(ev.id); return n })
+        }
+      }
+      return
+    }
+
+    // Normal create: add optimistic local event while API call is in flight
     const [sh, sm] = draft.startTime.split(':').map(Number)
     const [eh, em] = draft.endTime.split(':').map(Number)
     const [yr, mo, dy] = draft.date.split('-').map(Number)
@@ -162,7 +214,6 @@ export default function CalendarPage() {
     }
     setLocalEvents(prev => [...prev, optimisticEvent])
 
-    // Only attempt write-back if there are real accounts (not sample mode)
     if (!hasRealSetup) return
 
     try {
@@ -174,10 +225,8 @@ export default function CalendarPage() {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         showWriteError(data.error ?? 'Failed to save event to calendar')
-        // Remove optimistic event on failure
         setLocalEvents(prev => prev.filter(e => e.id !== optimisticId))
       }
-      // On success, leave the optimistic event; next poll will bring the real one
     } catch {
       showWriteError('Failed to reach server — event not saved')
       setLocalEvents(prev => prev.filter(e => e.id !== optimisticId))
@@ -347,6 +396,7 @@ export default function CalendarPage() {
               onSelectDate={handleSelectDate}
               onEventClick={handleEventClick}
               onAddEventOnDate={handleAddEventOnDate}
+              onMonthReschedule={handleMonthReschedule}
             />
           )}
           {view === 'week' && (
@@ -375,6 +425,7 @@ export default function CalendarPage() {
             events={displayEvents}
             onEventClick={handleEventClick}
             onDragCreate={handleDragCreate}
+            onReschedule={handleRescheduleEvent}
           />
         </div>
       </div>
@@ -398,8 +449,12 @@ export default function CalendarPage() {
         initialDate={modalInitialDate}
         initialStartTime={dragTimeRange?.startTime}
         initialEndTime={dragTimeRange?.endTime}
+        initialTitle={pendingMonthReschedule?.title}
+        initialFamilyMemberId={pendingMonthReschedule?.familyMemberId}
+        initialCalendarType={pendingMonthReschedule?.calendarType}
+        modalTitle={pendingMonthReschedule ? 'Move Event' : undefined}
         familyMembers={familyMembers}
-        onClose={() => { setModalOpen(false); setDragTimeRange(null) }}
+        onClose={() => { setModalOpen(false); setDragTimeRange(null); setPendingMonthReschedule(null) }}
         onSave={handleSaveEvent}
       />
 

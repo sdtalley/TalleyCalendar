@@ -6,8 +6,12 @@ import type { FamilyMember, NewEventDraft, CalendarType } from '@/lib/calendar/t
 interface EventModalProps {
   open: boolean
   initialDate?: Date
-  initialStartTime?: string  // HH:MM from drag-to-create
-  initialEndTime?: string    // HH:MM from drag-to-create
+  initialStartTime?: string   // HH:MM from drag-to-create
+  initialEndTime?: string     // HH:MM from drag-to-create
+  initialTitle?: string       // pre-fill for month reschedule
+  initialFamilyMemberId?: string
+  initialCalendarType?: CalendarType
+  modalTitle?: string         // header label override
   familyMembers: FamilyMember[]
   onClose: () => void
   onSave: (draft: NewEventDraft) => void
@@ -29,6 +33,10 @@ export function EventModal({
   initialDate,
   initialStartTime,
   initialEndTime,
+  initialTitle,
+  initialFamilyMemberId,
+  initialCalendarType,
+  modalTitle,
   familyMembers,
   onClose,
   onSave,
@@ -49,13 +57,15 @@ export function EventModal({
       setDraft(prev => ({
         ...prev,
         date: toDateString(initialDate ?? new Date()),
-        title: '',
+        title: initialTitle ?? '',
         startTime: initialStartTime ?? '09:00',
         endTime: initialEndTime ?? '10:00',
+        familyMemberId: initialFamilyMemberId ?? (familyMembers[0]?.id ?? ''),
+        calendarType: initialCalendarType ?? 'personal',
       }))
       setTimeout(() => titleRef.current?.focus(), 50)
     }
-  }, [open, initialDate])
+  }, [open, initialDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close on Escape
   useEffect(() => {
@@ -101,7 +111,7 @@ export function EventModal({
           className="flex items-center justify-between px-6 py-5"
           style={{ borderBottom: '1px solid var(--border)' }}
         >
-          <div className="text-[18px] font-bold">New Event</div>
+          <div className="text-[18px] font-bold">{modalTitle ?? 'New Event'}</div>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center text-lg cursor-pointer border-none transition-all duration-150"

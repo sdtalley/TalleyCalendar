@@ -70,6 +70,45 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
   const [reschedView, setReschedView] = useState<{ dayIndex: number; topMin: number; event: CalendarEvent } | null>(null)
   const suppressClickRef = useRef<string | null>(null) // event id to suppress next onClick
 
+  // ── Edge-scroll during reschedule drag ──
+  const scrollAnimRef = useRef<number | null>(null)
+  const lastMouseRef = useRef<{ clientX: number; clientY: number } | null>(null)
+
+  function stopEdgeScroll() {
+    if (scrollAnimRef.current !== null) {
+      cancelAnimationFrame(scrollAnimRef.current)
+      scrollAnimRef.current = null
+    }
+  }
+
+  function startEdgeScroll(
+    recompute: (clientX: number, clientY: number) => void
+  ) {
+    if (scrollAnimRef.current !== null) return
+    const EDGE_ZONE = 60
+    const MAX_SPEED = 10
+
+    function tick() {
+      const mouse = lastMouseRef.current
+      const body = bodyRef.current
+      if (!mouse || !body) { scrollAnimRef.current = null; return }
+
+      const rect = body.getBoundingClientRect()
+      const distTop = mouse.clientY - rect.top
+      const distBot = rect.bottom - mouse.clientY
+      let delta = 0
+      if (distTop < EDGE_ZONE && distTop >= 0) delta = -MAX_SPEED * (1 - distTop / EDGE_ZONE)
+      else if (distBot < EDGE_ZONE && distBot >= 0) delta = MAX_SPEED * (1 - distBot / EDGE_ZONE)
+
+      if (delta !== 0) {
+        body.scrollTop += delta
+        recompute(mouse.clientX, mouse.clientY)
+      }
+      scrollAnimRef.current = requestAnimationFrame(tick)
+    }
+    scrollAnimRef.current = requestAnimationFrame(tick)
+  }
+
   // Scroll to 7am on mount
   useEffect(() => {
     if (bodyRef.current) {
@@ -153,32 +192,27 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
     }
     reschedPosRef.current = { dayIndex, topMin: eventStartMin }
 
-    function onGlobalMove(me: MouseEvent) {
+    function recompute(clientX: number, clientY: number) {
       const rref = reschedRef.current
       if (!rref) return
 
-      if (Math.abs(me.clientY - rref.startY) > 8) rref.moved = true
-      if (!rref.moved) return
-
-      // Find which column the mouse is over based on X position
       let targetDayIndex = reschedPosRef.current?.dayIndex ?? 0
       let targetCol: HTMLDivElement | null = columnRefs.current[targetDayIndex]
       for (let i = 0; i < columnRefs.current.length; i++) {
         const c = columnRefs.current[i]
         if (!c) continue
         const rect = c.getBoundingClientRect()
-        if (me.clientX >= rect.left && me.clientX <= rect.right) {
+        if (clientX >= rect.left && clientX <= rect.right) {
           targetDayIndex = i
           targetCol = c
           break
         }
       }
 
-      // Compute Y position
       if (!targetCol) return
       const rect = targetCol.getBoundingClientRect()
       const scrollTop = bodyRef.current?.scrollTop ?? 0
-      const y = me.clientY - rect.top + scrollTop
+      const y = clientY - rect.top + scrollTop
       const rawMin = (y / (24 * HOUR_HEIGHT)) * 24 * 60
       const newTopMin = snapToQuarter(
         Math.max(0, Math.min(24 * 60 - rref.durationMin, rawMin - rref.clickOffsetMin))
@@ -189,9 +223,23 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
       setReschedView({ ...newPos, event: rref.event })
     }
 
+    function onGlobalMove(me: MouseEvent) {
+      const rref = reschedRef.current
+      if (!rref) return
+
+      if (Math.abs(me.clientY - rref.startY) > 8) rref.moved = true
+      if (!rref.moved) return
+
+      lastMouseRef.current = { clientX: me.clientX, clientY: me.clientY }
+      recompute(me.clientX, me.clientY)
+      startEdgeScroll(recompute)
+    }
+
     function onGlobalUp() {
       document.removeEventListener('mousemove', onGlobalMove)
       document.removeEventListener('mouseup', onGlobalUp)
+      stopEdgeScroll()
+      lastMouseRef.current = null
 
       const rref = reschedRef.current
       const pos = reschedPosRef.current

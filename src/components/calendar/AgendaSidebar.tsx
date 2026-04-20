@@ -14,13 +14,14 @@ interface AgendaSidebarProps {
   events: CalendarEvent[]
   onEventClick: (event: CalendarEvent) => void
   onDragCreate: (date: Date, startMinutes: number, endMinutes: number) => void
+  onReschedule?: (event: CalendarEvent, newDate: Date, newStartMinutes: number) => void
 }
 
 function toDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-export function AgendaSidebar({ selectedDate, events, onEventClick, onDragCreate }: AgendaSidebarProps) {
+export function AgendaSidebar({ selectedDate, events, onEventClick, onDragCreate, onReschedule }: AgendaSidebarProps) {
   const today = new Date()
   const [mode, setMode] = useState<'hours' | 'agenda'>('hours')
   const [note, setNote] = useState('')
@@ -182,6 +183,7 @@ export function AgendaSidebar({ selectedDate, events, onEventClick, onDragCreate
           events={events}
           onEventClick={onEventClick}
           onDragCreate={onDragCreate}
+          onReschedule={onReschedule}
           hideHeader
         />
       )}
