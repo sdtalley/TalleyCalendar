@@ -16,13 +16,14 @@ interface WeekViewProps {
   events: CalendarEvent[]
   onEventClick: (event: CalendarEvent) => void
   onDragCreate?: (date: Date, startMinutes: number, endMinutes: number) => void
+  onReschedule?: (event: CalendarEvent, newDate: Date, newStartMinutes: number) => void
 }
 
 function snapToQuarter(minutes: number): number {
   return Math.round(minutes / 15) * 15
 }
 
-export function WeekView({ currentDate, events, onEventClick, onDragCreate }: WeekViewProps) {
+export function WeekView({ currentDate, events, onEventClick, onDragCreate, onReschedule }: WeekViewProps) {
   const today = new Date()
   const weekDates = getWeekDates(currentDate)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -50,11 +51,24 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate }: We
       .catch(() => {})
   }, [weekDates[0].toISOString()]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Drag-to-create state
+  // ── Drag-to-create state ──
   const [dragDayIndex, setDragDayIndex] = useState<number | null>(null)
   const [dragStart, setDragStart] = useState<number | null>(null)
   const [dragEnd, setDragEnd] = useState<number | null>(null)
   const dragging = useRef(false)
+
+  // ── Drag-to-reschedule state ──
+  // Using refs for values needed in global listeners (avoids stale closures)
+  const reschedRef = useRef<{
+    event: CalendarEvent
+    clickOffsetMin: number  // where within the event the user clicked
+    durationMin: number
+    startY: number
+    moved: boolean
+  } | null>(null)
+  const reschedPosRef = useRef<{ dayIndex: number; topMin: number } | null>(null)
+  const [reschedView, setReschedView] = useState<{ dayIndex: number; topMin: number; event: CalendarEvent } | null>(null)
+  const suppressClickRef = useRef<string | null>(null) // event id to suppress next onClick
 
   // Scroll to 7am on mount
   useEffect(() => {
@@ -72,7 +86,10 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate }: We
     return Math.max(0, Math.min(24 * 60, snapToQuarter(minutes)))
   }, [])
 
+  // ── Drag-to-create handlers ──
+
   const handleMouseDown = useCallback((e: React.MouseEvent, dayIndex: number) => {
+    if ((e.target as HTMLElement).closest('[data-event-id]')) return // let event handle it
     if ((e.target as HTMLElement).closest('button')) return
     dragging.current = true
     const min = getMinutesFromY(e.clientY, columnRefs.current[dayIndex])
@@ -110,6 +127,87 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate }: We
       setDragEnd(null)
     }
   }, [])
+
+  // ── Drag-to-reschedule: start on event mousedown ──
+
+  const handleEventMouseDown = useCallback((
+    e: React.MouseEvent,
+    ev: CalendarEvent,
+    dayIndex: number
+  ) => {
+    if (!onReschedule || (ev.provider !== 'google' && ev.provider !== 'outlook')) return
+
+    e.stopPropagation() // prevent column drag-to-create from starting
+
+    const col = columnRefs.current[dayIndex]
+    const clickMin = getMinutesFromY(e.clientY, col)
+    const eventStartMin = ev.start.getHours() * 60 + ev.start.getMinutes()
+    const eventEndMin = ev.end.getHours() * 60 + ev.end.getMinutes()
+
+    reschedRef.current = {
+      event: ev,
+      clickOffsetMin: Math.max(0, clickMin - eventStartMin),
+      durationMin: Math.max(15, eventEndMin - eventStartMin),
+      startY: e.clientY,
+      moved: false,
+    }
+    reschedPosRef.current = { dayIndex, topMin: eventStartMin }
+
+    function onGlobalMove(me: MouseEvent) {
+      const rref = reschedRef.current
+      if (!rref) return
+
+      if (Math.abs(me.clientY - rref.startY) > 8) rref.moved = true
+      if (!rref.moved) return
+
+      // Find which column the mouse is over based on X position
+      let targetDayIndex = reschedPosRef.current?.dayIndex ?? 0
+      let targetCol: HTMLDivElement | null = columnRefs.current[targetDayIndex]
+      for (let i = 0; i < columnRefs.current.length; i++) {
+        const c = columnRefs.current[i]
+        if (!c) continue
+        const rect = c.getBoundingClientRect()
+        if (me.clientX >= rect.left && me.clientX <= rect.right) {
+          targetDayIndex = i
+          targetCol = c
+          break
+        }
+      }
+
+      // Compute Y position
+      if (!targetCol) return
+      const rect = targetCol.getBoundingClientRect()
+      const scrollTop = bodyRef.current?.scrollTop ?? 0
+      const y = me.clientY - rect.top + scrollTop
+      const rawMin = (y / (24 * HOUR_HEIGHT)) * 24 * 60
+      const newTopMin = snapToQuarter(
+        Math.max(0, Math.min(24 * 60 - rref.durationMin, rawMin - rref.clickOffsetMin))
+      )
+
+      const newPos = { dayIndex: targetDayIndex, topMin: newTopMin }
+      reschedPosRef.current = newPos
+      setReschedView({ ...newPos, event: rref.event })
+    }
+
+    function onGlobalUp() {
+      document.removeEventListener('mousemove', onGlobalMove)
+      document.removeEventListener('mouseup', onGlobalUp)
+
+      const rref = reschedRef.current
+      const pos = reschedPosRef.current
+      reschedRef.current = null
+      reschedPosRef.current = null
+      setReschedView(null)
+
+      if (rref?.moved && pos && onReschedule) {
+        suppressClickRef.current = rref.event.id
+        onReschedule(rref.event, weekDates[pos.dayIndex], pos.topMin)
+      }
+    }
+
+    document.addEventListener('mousemove', onGlobalMove)
+    document.addEventListener('mouseup', onGlobalUp)
+  }, [getMinutesFromY, onReschedule, weekDates])
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -283,7 +381,7 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate }: We
                 />
               ))}
 
-              {/* Drag preview */}
+              {/* Drag-to-create preview */}
               {isDragTarget && previewHeight > 0 && (
                 <div
                   className="absolute left-[2px] right-[2px] rounded-md pointer-events-none"
@@ -304,23 +402,38 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate }: We
                 const top = (startMin / 60) * HOUR_HEIGHT
                 const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 20)
 
+                // While this event is being rescheduled, dim it and show ghost at new position
+                const isBeingRescheduled = reschedView?.event.id === ev.id
+
                 return (
                   <button
                     key={ev.id}
-                    onClick={() => onEventClick(ev)}
-                    className="absolute left-[2px] right-[2px] rounded-md px-2 py-1 text-[11px] font-medium overflow-hidden cursor-pointer border-none text-left transition-all duration-100"
+                    data-event-id={ev.id}
+                    onClick={() => {
+                      if (suppressClickRef.current === ev.id) {
+                        suppressClickRef.current = null
+                        return
+                      }
+                      onEventClick(ev)
+                    }}
+                    onMouseDown={e => handleEventMouseDown(e, ev, di)}
+                    className="absolute left-[2px] right-[2px] rounded-md px-2 py-1 text-[11px] font-medium overflow-hidden border-none text-left transition-all duration-100"
                     style={{
                       top,
                       height,
-                      background: hexToRgba(ev.color, 0.2),
+                      background: hexToRgba(ev.color, isBeingRescheduled ? 0.08 : 0.2),
                       color: ev.color,
                       borderLeft: `3px solid ${ev.color}`,
+                      opacity: isBeingRescheduled ? 0.4 : 1,
                       zIndex: 2,
                       lineHeight: 1.3,
+                      cursor: onReschedule && (ev.provider === 'google' || ev.provider === 'outlook') ? 'grab' : 'pointer',
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.filter = 'brightness(1.2)'
-                      e.currentTarget.style.zIndex = '3'
+                      if (!isBeingRescheduled) {
+                        e.currentTarget.style.filter = 'brightness(1.2)'
+                        e.currentTarget.style.zIndex = '3'
+                      }
                     }}
                     onMouseLeave={e => {
                       e.currentTarget.style.filter = ''
@@ -331,6 +444,28 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate }: We
                   </button>
                 )
               })}
+
+              {/* Drag-to-reschedule ghost */}
+              {reschedView && reschedView.dayIndex === di && (() => {
+                const ghostHeight = Math.max((reschedView.event.end.getTime() - reschedView.event.start.getTime()) / 60000 / 60 * HOUR_HEIGHT, 20)
+                return (
+                  <div
+                    className="absolute left-[2px] right-[2px] rounded-md px-2 py-1 text-[11px] font-medium overflow-hidden pointer-events-none"
+                    style={{
+                      top: (reschedView.topMin / 60) * HOUR_HEIGHT,
+                      height: ghostHeight,
+                      background: hexToRgba(reschedView.event.color, 0.35),
+                      color: reschedView.event.color,
+                      borderLeft: `3px solid ${reschedView.event.color}`,
+                      border: `2px dashed ${reschedView.event.color}`,
+                      zIndex: 10,
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    <div>{reschedView.event.title}</div>
+                  </div>
+                )
+              })()}
 
               {/* Current time line */}
               {sameDay(day, today) && (

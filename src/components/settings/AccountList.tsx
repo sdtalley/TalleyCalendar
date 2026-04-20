@@ -23,6 +23,7 @@ interface AccountListProps {
   onAddAccount: (memberId: string) => void
   onRemoveAccount: (accountId: string) => Promise<void>
   onToggleCalendar: (accountId: string, calendarId: string, enabled: boolean) => Promise<void>
+  onSetDefaultWriteCalendar: (accountId: string, calendarId: string) => Promise<void>
 }
 
 export function AccountList({
@@ -31,6 +32,7 @@ export function AccountList({
   onAddAccount,
   onRemoveAccount,
   onToggleCalendar,
+  onSetDefaultWriteCalendar,
 }: AccountListProps) {
   function accountsFor(memberId: string) {
     return accounts.filter(a => a.familyMemberId === memberId)
@@ -94,6 +96,9 @@ export function AccountList({
                       onToggleCalendar={(calId, enabled) =>
                         onToggleCalendar(account.id, calId, enabled)
                       }
+                      onSetDefaultWriteCalendar={(calId) =>
+                        onSetDefaultWriteCalendar(account.id, calId)
+                      }
                     />
                   ))}
                 </div>
@@ -110,10 +115,12 @@ function AccountCard({
   account,
   onRemove,
   onToggleCalendar,
+  onSetDefaultWriteCalendar,
 }: {
   account: AccountSafe
   onRemove: () => void
   onToggleCalendar: (calendarId: string, enabled: boolean) => void
+  onSetDefaultWriteCalendar: (calendarId: string) => void
 }) {
   const status = STATUS_STYLES[account.status] ?? STATUS_STYLES.error
 
@@ -180,6 +187,39 @@ function AccountCard({
               {cal.name}
             </label>
           ))}
+        </div>
+      )}
+
+      {/* Write-target selector — Google and Outlook only (Apple is read-only) */}
+      {account.provider !== 'apple' && account.enabledCalendars.some(c => c.enabled) && (
+        <div className="flex flex-col gap-1 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+          <div className="text-[10px] font-semibold uppercase tracking-wider pt-1 pb-0.5" style={{ color: 'var(--text-faint)' }}>
+            Write new events to
+          </div>
+          {account.enabledCalendars.filter(c => c.enabled).map(cal => {
+            const isDefault =
+              account.defaultWriteCalendarId
+                ? account.defaultWriteCalendarId === cal.calendarId
+                : (account.provider === 'google'
+                    ? cal.calendarId === 'primary'
+                    : account.enabledCalendars.find(c => c.enabled)?.calendarId === cal.calendarId)
+            return (
+              <label
+                key={cal.calendarId}
+                className="flex items-center gap-2 px-1 py-1 rounded cursor-pointer text-sm"
+                style={{ color: 'var(--text-dim)' }}
+              >
+                <input
+                  type="radio"
+                  name={`write-target-${account.id}`}
+                  checked={!!isDefault}
+                  onChange={() => onSetDefaultWriteCalendar(cal.calendarId)}
+                  className="accent-[var(--accent)]"
+                />
+                {cal.name}
+              </label>
+            )
+          })}
         </div>
       )}
     </div>

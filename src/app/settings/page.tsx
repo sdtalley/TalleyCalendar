@@ -130,6 +130,15 @@ export default function SettingsPage() {
     if (res.ok) await fetchData()
   }
 
+  async function handleSetDefaultWriteCalendar(accountId: string, calendarId: string) {
+    const res = await fetch(`/api/accounts/${accountId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ defaultWriteCalendarId: calendarId }),
+    })
+    if (res.ok) await fetchData()
+  }
+
   async function handleToggleCalendar(accountId: string, calendarId: string, enabled: boolean) {
     const account = accounts.find(a => a.id === accountId)
     if (!account) return
@@ -296,6 +305,7 @@ export default function SettingsPage() {
             onAddAccount={memberId => setAddAccountMemberId(memberId)}
             onRemoveAccount={handleRemoveAccount}
             onToggleCalendar={handleToggleCalendar}
+            onSetDefaultWriteCalendar={handleSetDefaultWriteCalendar}
           />
         </section>
 

@@ -4,6 +4,10 @@ import { updateAccount } from '../redis'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3'
 
+function toDateStr(d: Date): string {
+  return d.toISOString().split('T')[0]
+}
+
 // ── Token refresh ──────────────────────────────────────────────────────────
 
 async function refreshAccessToken(account: ConnectedAccount): Promise<string> {
@@ -123,4 +127,69 @@ export async function fetchGoogleEvents(
   }
 
   return events
+}
+
+// ── Write operations ───────────────────────────────────────────────────────
+
+export async function createGoogleEvent(
+  account: ConnectedAccount,
+  calendarId: string,
+  event: { title: string; start: Date; end: Date; allDay: boolean; description?: string; location?: string }
+): Promise<{ externalId: string }> {
+  const token = await refreshAccessToken(account)
+
+  const body = event.allDay
+    ? { summary: event.title, description: event.description, location: event.location, start: { date: toDateStr(event.start) }, end: { date: toDateStr(event.end) } }
+    : { summary: event.title, description: event.description, location: event.location, start: { dateTime: event.start.toISOString() }, end: { dateTime: event.end.toISOString() } }
+
+  const res = await fetch(
+    `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events`,
+    { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  )
+  if (!res.ok) throw new Error(`Google create event failed: ${res.status}`)
+  const data = await res.json()
+  return { externalId: data.id }
+}
+
+export async function updateGoogleEvent(
+  account: ConnectedAccount,
+  calendarId: string,
+  externalId: string,
+  updates: { title?: string; start?: Date; end?: Date; allDay?: boolean; description?: string }
+): Promise<void> {
+  const token = await refreshAccessToken(account)
+
+  const body: Record<string, unknown> = {}
+  if (updates.title !== undefined) body.summary = updates.title
+  if (updates.description !== undefined) body.description = updates.description
+  if (updates.start && updates.end) {
+    if (updates.allDay) {
+      body.start = { date: toDateStr(updates.start) }
+      body.end = { date: toDateStr(updates.end) }
+    } else {
+      body.start = { dateTime: updates.start.toISOString() }
+      body.end = { dateTime: updates.end.toISOString() }
+    }
+  }
+
+  const res = await fetch(
+    `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(externalId)}`,
+    { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  )
+  if (!res.ok) throw new Error(`Google update event failed: ${res.status}`)
+}
+
+export async function deleteGoogleEvent(
+  account: ConnectedAccount,
+  calendarId: string,
+  externalId: string
+): Promise<void> {
+  const token = await refreshAccessToken(account)
+
+  const res = await fetch(
+    `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(externalId)}`,
+    { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+  )
+  // 410 = already deleted; treat as success
+  if (!res.ok && res.status !== 410) throw new Error(`Google delete event failed: ${res.status}`)
 }

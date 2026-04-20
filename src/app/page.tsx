@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { TopBar } from '@/components/layout/TopBar'
 import { ListsPanel, MobileListsDrawer } from '@/components/lists/ListsPanel'
 import { MonthView } from '@/components/calendar/MonthView'
@@ -27,6 +27,12 @@ export default function CalendarPage() {
 
   const [sampleEvents] = useState<CalendarEvent[]>(() => generateSampleEvents())
   const [localEvents, setLocalEvents] = useState<CalendarEvent[]>([])
+  // IDs of events deleted locally (hidden until next poll reconciles)
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set())
+  // Optimistic reschedule overrides: eventId → { start, end }
+  const [rescheduleOverrides, setRescheduleOverrides] = useState<Map<string, { start: Date; end: Date }>>(() => new Map())
+  const [writeError, setWriteError] = useState<string | null>(null)
+  const writeErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const hasRealSetup = liveMembers.length > 0
   const baseEvents = hasRealSetup
@@ -48,8 +54,16 @@ export default function CalendarPage() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [mobileListsOpen, setMobileListsOpen] = useState(false)
 
+  // Apply deletions and reschedule overrides before display
+  const visibleWithOverrides = visibleEvents
+    .filter(e => !deletedIds.has(e.id))
+    .map(e => {
+      const override = rescheduleOverrides.get(e.id)
+      return override ? { ...e, ...override } : e
+    })
+
   const displayEvents = searchQuery.trim()
-    ? visibleEvents.filter(e => {
+    ? visibleWithOverrides.filter(e => {
         const q = searchQuery.toLowerCase()
         return (
           e.title.toLowerCase().includes(q) ||
@@ -57,7 +71,13 @@ export default function CalendarPage() {
           (e.description?.toLowerCase().includes(q) ?? false)
         )
       })
-    : visibleEvents
+    : visibleWithOverrides
+
+  function showWriteError(msg: string) {
+    setWriteError(msg)
+    if (writeErrorTimer.current) clearTimeout(writeErrorTimer.current)
+    writeErrorTimer.current = setTimeout(() => setWriteError(null), 5000)
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -115,19 +135,19 @@ export default function CalendarPage() {
     setModalOpen(true)
   }
 
-  function handleSaveEvent(draft: NewEventDraft) {
+  async function handleSaveEvent(draft: NewEventDraft) {
     const member = familyMembers.find(m => m.id === draft.familyMemberId)
     if (!member) return
 
+    // Optimistic local event while API call is in flight
     const [sh, sm] = draft.startTime.split(':').map(Number)
     const [eh, em] = draft.endTime.split(':').map(Number)
     const [yr, mo, dy] = draft.date.split('-').map(Number)
-
     const start = new Date(yr, mo - 1, dy, sh, sm)
     const end = new Date(yr, mo - 1, dy, eh, em)
-
-    const newEvent: CalendarEvent = {
-      id: `local-${Date.now()}`,
+    const optimisticId = `local-${Date.now()}`
+    const optimisticEvent: CalendarEvent = {
+      id: optimisticId,
       provider: 'local',
       accountId: 'local',
       title: draft.title,
@@ -140,8 +160,107 @@ export default function CalendarPage() {
       color: member.color,
       source: { calendarId: 'local', calendarName: 'Local', provider: 'local' },
     }
+    setLocalEvents(prev => [...prev, optimisticEvent])
 
-    setLocalEvents(prev => [...prev, newEvent])
+    // Only attempt write-back if there are real accounts (not sample mode)
+    if (!hasRealSetup) return
+
+    try {
+      const res = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draft),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        showWriteError(data.error ?? 'Failed to save event to calendar')
+        // Remove optimistic event on failure
+        setLocalEvents(prev => prev.filter(e => e.id !== optimisticId))
+      }
+      // On success, leave the optimistic event; next poll will bring the real one
+    } catch {
+      showWriteError('Failed to reach server — event not saved')
+      setLocalEvents(prev => prev.filter(e => e.id !== optimisticId))
+    }
+  }
+
+  async function handleDeleteEvent(event: CalendarEvent) {
+    if (!event.externalId) return
+
+    // Optimistic removal
+    setDeletedIds(prev => new Set(Array.from(prev).concat(event.id)))
+
+    try {
+      const res = await fetch(`/api/events/${encodeURIComponent(event.id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountId: event.accountId,
+          calendarId: event.source.calendarId,
+          externalId: event.externalId,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        showWriteError(data.error ?? 'Failed to delete event')
+        // Restore event on failure
+        setDeletedIds(prev => {
+          const next = new Set(prev)
+          next.delete(event.id)
+          return next
+        })
+      }
+    } catch {
+      showWriteError('Failed to reach server — event not deleted')
+      setDeletedIds(prev => {
+        const next = new Set(prev)
+        next.delete(event.id)
+        return next
+      })
+    }
+  }
+
+  async function handleRescheduleEvent(event: CalendarEvent, newDate: Date, newStartMinutes: number) {
+    if (!event.externalId) return
+
+    const durationMs = event.end.getTime() - event.start.getTime()
+    const newStart = new Date(newDate)
+    newStart.setHours(Math.floor(newStartMinutes / 60), newStartMinutes % 60, 0, 0)
+    const newEnd = new Date(newStart.getTime() + durationMs)
+
+    // Optimistic update
+    setRescheduleOverrides(prev => new Map(prev).set(event.id, { start: newStart, end: newEnd }))
+
+    try {
+      const res = await fetch(`/api/events/${encodeURIComponent(event.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountId: event.accountId,
+          calendarId: event.source.calendarId,
+          externalId: event.externalId,
+          start: newStart.toISOString(),
+          end: newEnd.toISOString(),
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        showWriteError(data.error ?? 'Failed to reschedule event')
+        // Revert optimistic update on failure
+        setRescheduleOverrides(prev => {
+          const next = new Map(prev)
+          next.delete(event.id)
+          return next
+        })
+      }
+    } catch {
+      showWriteError('Failed to reach server — event not rescheduled')
+      setRescheduleOverrides(prev => {
+        const next = new Map(prev)
+        next.delete(event.id)
+        return next
+      })
+    }
   }
 
   function handleEventClick(event: CalendarEvent) {
@@ -197,6 +316,21 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {writeError && (
+        <div
+          className="px-4 py-2 text-xs text-center flex items-center justify-between"
+          style={{ background: 'rgba(255,107,107,0.1)', color: '#ff6b6b' }}
+        >
+          <span>{writeError}</span>
+          <button
+            onClick={() => setWriteError(null)}
+            style={{ background: 'none', border: 'none', color: '#ff6b6b', cursor: 'pointer', padding: '0 4px' }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Lists panel — desktop only */}
         <div className="hidden md:flex">
@@ -221,6 +355,7 @@ export default function CalendarPage() {
               events={displayEvents}
               onEventClick={handleEventClick}
               onDragCreate={handleDragCreate}
+              onReschedule={handleRescheduleEvent}
             />
           )}
           {view === 'day' && (
@@ -272,6 +407,7 @@ export default function CalendarPage() {
         event={detailEvent}
         familyMembers={familyMembers}
         onClose={() => setDetailEvent(null)}
+        onDelete={handleDeleteEvent}
       />
     </div>
   )

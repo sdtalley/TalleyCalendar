@@ -16,12 +16,13 @@ export async function PATCH(
   }
 
   // Only allow updating safe fields (not auth or provider)
-  const { label, calendarType, enabledCalendars, status } = body
+  const { label, calendarType, enabledCalendars, status, defaultWriteCalendarId } = body
   const updates: Record<string, unknown> = {}
   if (label !== undefined) updates.label = label
   if (calendarType !== undefined) updates.calendarType = calendarType
   if (enabledCalendars !== undefined) updates.enabledCalendars = enabledCalendars
   if (status !== undefined) updates.status = status
+  if (defaultWriteCalendarId !== undefined) updates.defaultWriteCalendarId = defaultWriteCalendarId
 
   const updated = await updateAccount(id, updates)
   if (!updated) {

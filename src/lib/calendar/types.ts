@@ -40,6 +40,7 @@ export interface ConnectedAccount {
   calendarType: CalendarType
   auth: OAuthCredentials | CalDAVCredentials
   enabledCalendars: EnabledCalendar[]
+  defaultWriteCalendarId?: string   // target for new events; falls back to "primary" / first enabled
   status: AccountStatus
   connectedAt: string   // ISO date
   lastSyncAt?: string   // ISO date

@@ -8,6 +8,7 @@ interface EventDetailModalProps {
   event: CalendarEvent | null
   familyMembers: FamilyMemberUI[]
   onClose: () => void
+  onDelete?: (event: CalendarEvent) => void
 }
 
 function formatDateLong(d: Date, allDay = false): string {
@@ -31,7 +32,7 @@ function providerLabel(provider: string): string {
   }
 }
 
-export function EventDetailModal({ event, familyMembers, onClose }: EventDetailModalProps) {
+export function EventDetailModal({ event, familyMembers, onClose, onDelete }: EventDetailModalProps) {
   const open = !!event
 
   // Close on Escape
@@ -196,9 +197,27 @@ export function EventDetailModal({ event, familyMembers, onClose }: EventDetailM
 
         {/* Footer */}
         <div
-          className="flex justify-end px-6 py-4"
+          className="flex items-center justify-between px-6 py-4"
           style={{ borderTop: '1px solid var(--border)' }}
         >
+          <div>
+            {onDelete && (event.provider === 'google' || event.provider === 'outlook') && (
+              <button
+                onClick={() => {
+                  if (window.confirm(`Delete "${event.title}"? This cannot be undone.`)) {
+                    onDelete(event)
+                    onClose()
+                  }
+                }}
+                className="px-4 py-2 rounded-[8px] text-sm font-medium cursor-pointer border-none transition-all duration-150"
+                style={{ background: 'rgba(255,107,107,0.12)', color: '#ff6b6b' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,107,107,0.22)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,107,107,0.12)' }}
+              >
+                Delete
+              </button>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="px-5 py-2.5 rounded-[8px] text-sm font-medium cursor-pointer border-none transition-all duration-150"

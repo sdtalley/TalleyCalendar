@@ -1,7 +1,8 @@
 {
   "permissions": {
     "additionalDirectories": [
-      "c:\\Users\\steven.talley\\OneDrive\\SoftDev\\TalleyCalendar\\src\\app\\api"
+      "c:\\Users\\steven.talley\\OneDrive\\SoftDev\\TalleyCalendar\\src\\app\\api",
+      "c:\\Users\\steven.talley\\OneDrive\\SoftDev\\TalleyCalendar\\src\\app\\api\\events"
     ]
   }
 }

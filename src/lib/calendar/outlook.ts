@@ -132,3 +132,67 @@ export async function fetchOutlookEvents(
 
   return events
 }
+
+// ── Write operations ───────────────────────────────────────────────────────
+
+export async function createOutlookEvent(
+  account: ConnectedAccount,
+  calendarId: string,
+  event: { title: string; start: Date; end: Date; allDay: boolean; description?: string; location?: string }
+): Promise<{ externalId: string }> {
+  const token = await refreshAccessToken(account)
+
+  const toGraphDT = (d: Date) => d.toISOString().replace('Z', '')
+  const body: Record<string, unknown> = {
+    subject: event.title,
+    isAllDay: event.allDay,
+    start: { dateTime: toGraphDT(event.start), timeZone: 'UTC' },
+    end: { dateTime: toGraphDT(event.end), timeZone: 'UTC' },
+  }
+  if (event.description) body.body = { contentType: 'Text', content: event.description }
+  if (event.location) body.location = { displayName: event.location }
+
+  const res = await fetch(
+    `${GRAPH_API}/me/calendars/${calendarId}/events`,
+    { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  )
+  if (!res.ok) throw new Error(`Outlook create event failed: ${res.status}`)
+  const data = await res.json()
+  return { externalId: data.id }
+}
+
+export async function updateOutlookEvent(
+  account: ConnectedAccount,
+  calendarId: string,
+  externalId: string,
+  updates: { title?: string; start?: Date; end?: Date; allDay?: boolean; description?: string }
+): Promise<void> {
+  const token = await refreshAccessToken(account)
+
+  const toGraphDT = (d: Date) => d.toISOString().replace('Z', '')
+  const body: Record<string, unknown> = {}
+  if (updates.title !== undefined) body.subject = updates.title
+  if (updates.description !== undefined) body.body = { contentType: 'Text', content: updates.description }
+  if (updates.start) body.start = { dateTime: toGraphDT(updates.start), timeZone: 'UTC' }
+  if (updates.end) body.end = { dateTime: toGraphDT(updates.end), timeZone: 'UTC' }
+
+  const res = await fetch(
+    `${GRAPH_API}/me/calendars/${calendarId}/events/${externalId}`,
+    { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+  )
+  if (!res.ok) throw new Error(`Outlook update event failed: ${res.status}`)
+}
+
+export async function deleteOutlookEvent(
+  account: ConnectedAccount,
+  calendarId: string,
+  externalId: string
+): Promise<void> {
+  const token = await refreshAccessToken(account)
+
+  const res = await fetch(
+    `${GRAPH_API}/me/calendars/${calendarId}/events/${externalId}`,
+    { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+  )
+  if (!res.ok && res.status !== 404) throw new Error(`Outlook delete event failed: ${res.status}`)
+}

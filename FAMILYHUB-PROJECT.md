@@ -226,12 +226,12 @@ Pi 3B/4/5 running:
 - [x] **Publish Google OAuth app** — moved consent screen from "Testing" to "Published" in Google Cloud Console; eliminates 7-day refresh token expiry
 - [x] **Reconnect button UI** — in `AccountList.tsx`, amber "Reconnect" button shown when `status === 'reauth_needed'` (Google + Outlook); re-triggers OAuth via `?reconnectAccountId=` param; callback updates only tokens + status, preserving label/calendarType/enabledCalendars
 
-#### Event Write-Back
-- [ ] **`defaultWriteCalendarId` per account** — add field to `ConnectedAccount`; shown in account settings as dropdown of that account's enabled calendars; falls back to `"primary"` for Google
-- [ ] `POST /api/events` — create event on provider (Google Calendar API, MS Graph)
-- [ ] `PATCH /api/events/:id` — update event on provider (move, resize, rename)
-- [ ] `DELETE /api/events/:id` — delete event on provider
-- [ ] **Drag-to-reschedule** — drag existing events in Week/Day views to new times (requires write-back)
+#### Event Write-Back ✅
+- [x] **`defaultWriteCalendarId` per account** — add field to `ConnectedAccount`; shown in account settings as radio selector of enabled calendars; falls back to `"primary"` for Google
+- [x] `POST /api/events` — create event on provider (Google Calendar API, MS Graph); optimistic local event shown immediately
+- [x] `PATCH /api/events/:id` — update event on provider (move, resize, rename); optimistic position shown during drag
+- [x] `DELETE /api/events/:id` — delete event on provider; Delete button in EventDetailModal (Google/Outlook only)
+- [x] **Drag-to-reschedule** — drag existing Google/Outlook events in Week view to new times; ghost preview during drag; cross-day supported
 
 #### Meals Feature ✅
 - [x] **`meal:{YYYY-MM-DD}` Redis key** — stores `{ name: string }` JSON (structured for future ingredient expansion)
