@@ -175,6 +175,7 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
     dayIndex: number
   ) => {
     if (!onReschedule || (ev.provider !== 'google' && ev.provider !== 'outlook')) return
+    if (ev.calendarType !== 'shared' && ev.calendarType !== 'kids') return
 
     e.stopPropagation() // prevent column drag-to-create from starting
 
@@ -475,7 +476,7 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
                       opacity: isBeingRescheduled ? 0.4 : 1,
                       zIndex: 2,
                       lineHeight: 1.3,
-                      cursor: onReschedule && (ev.provider === 'google' || ev.provider === 'outlook') ? 'grab' : 'pointer',
+                      cursor: onReschedule && (ev.provider === 'google' || ev.provider === 'outlook') && (ev.calendarType === 'shared' || ev.calendarType === 'kids') ? 'grab' : 'pointer',
                     }}
                     onMouseEnter={e => {
                       if (!isBeingRescheduled) {

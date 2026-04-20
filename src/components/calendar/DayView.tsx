@@ -145,6 +145,7 @@ export function DayView({ currentDate, events, onEventClick, onDragCreate, onRes
   // Drag-to-reschedule: start on event mousedown
   const handleEventMouseDown = useCallback((e: React.MouseEvent, ev: CalendarEvent) => {
     if (!onReschedule || (ev.provider !== 'google' && ev.provider !== 'outlook')) return
+    if (ev.calendarType !== 'shared' && ev.calendarType !== 'kids') return
 
     e.stopPropagation()
 
@@ -333,7 +334,7 @@ export function DayView({ currentDate, events, onEventClick, onDragCreate, onRes
                   borderLeft: `4px solid ${ev.color}`,
                   opacity: isBeingRescheduled ? 0.4 : 1,
                   zIndex: 2,
-                  cursor: onReschedule && (ev.provider === 'google' || ev.provider === 'outlook') ? 'grab' : 'pointer',
+                  cursor: onReschedule && (ev.provider === 'google' || ev.provider === 'outlook') && (ev.calendarType === 'shared' || ev.calendarType === 'kids') ? 'grab' : 'pointer',
                 }}
                 onMouseEnter={e => { if (!isBeingRescheduled) e.currentTarget.style.filter = 'brightness(1.15)' }}
                 onMouseLeave={e => { e.currentTarget.style.filter = '' }}
