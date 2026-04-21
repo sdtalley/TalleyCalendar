@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAllAccounts, getFamilyMembers } from '@/lib/redis'
+import { getAllAccounts, getFamilyMembers, getLocalEvents } from '@/lib/redis'
 import { fetchGoogleEvents } from '@/lib/calendar/google'
 import { fetchOutlookEvents } from '@/lib/calendar/outlook'
 import { fetchAppleEvents } from '@/lib/calendar/apple'
 import { expandRecurringEvents } from '@/lib/calendar/recurrence'
+import { normalizeLocalEvent } from '@/lib/calendar/local'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
 // GET /api/calendars?start=ISO&end=ISO
@@ -67,6 +68,23 @@ export async function GET(req: NextRequest) {
         provider: account.provider,
         error: result.reason?.message ?? 'Unknown error',
       })
+    }
+  }
+
+  // Add local events for localOnly members, filtered to the requested window
+  const localMembers = members.filter(m => m.localOnly)
+  const localResults = await Promise.allSettled(
+    localMembers.map(m => getLocalEvents(m.id))
+  )
+  for (let i = 0; i < localResults.length; i++) {
+    const result = localResults[i]
+    if (result.status !== 'fulfilled') continue
+    const member = localMembers[i]
+    for (const le of result.value) {
+      const start = new Date(le.start)
+      const end = new Date(le.end)
+      if (end < timeMin || start > timeMax) continue
+      allEvents.push(normalizeLocalEvent(le, member))
     }
   }
 

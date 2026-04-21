@@ -6,6 +6,21 @@ export interface FamilyMember {
   id: string
   name: string
   color: string
+  localOnly?: boolean                          // no external account; events stored in Redis
+  defaultCalendarType?: 'kids' | 'shared'     // calendarType applied to all local events
+}
+
+// ── Local Event (stored in Redis for localOnly members) ────────────────────
+export interface LocalEvent {
+  id: string
+  memberId: string
+  calendarType: 'kids' | 'shared'
+  title: string
+  description?: string
+  location?: string
+  start: string   // ISO string
+  end: string     // ISO string
+  allDay: boolean
 }
 
 // ── Connected Account (stored in Redis per-account) ────────────────────────

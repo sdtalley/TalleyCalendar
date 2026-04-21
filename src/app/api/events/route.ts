@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAccountsForMember } from '@/lib/redis'
+import { getAccountsForMember, getFamilyMembers, saveLocalEvent } from '@/lib/redis'
 import { createGoogleEvent } from '@/lib/calendar/google'
 import { createOutlookEvent } from '@/lib/calendar/outlook'
-import type { CalendarType } from '@/lib/calendar/types'
+import type { CalendarType, LocalEvent } from '@/lib/calendar/types'
+import { randomUUID } from 'crypto'
 
 interface CreateEventBody {
   title: string
@@ -23,6 +24,44 @@ export async function POST(req: NextRequest) {
 
   if (!title || !date || !familyMemberId) {
     return NextResponse.json({ error: 'title, date, familyMemberId required' }, { status: 400 })
+  }
+
+  // Check if this member is localOnly — if so, write to Redis instead of a provider
+  const members = await getFamilyMembers()
+  const member = members.find(m => m.id === familyMemberId)
+  if (member?.localOnly) {
+    const [yr, mo, dy] = date.split('-').map(Number)
+    let startISO: string, endISO: string
+    if (allDay) {
+      startISO = new Date(Date.UTC(yr, mo - 1, dy)).toISOString()
+      endISO = new Date(Date.UTC(yr, mo - 1, dy + 1)).toISOString()
+    } else {
+      const [sh, sm] = (startTime ?? '09:00').split(':').map(Number)
+      const [eh, em] = (endTime ?? '10:00').split(':').map(Number)
+      startISO = new Date(yr, mo - 1, dy, sh, sm).toISOString()
+      endISO = new Date(yr, mo - 1, dy, eh, em).toISOString()
+    }
+    const localCalType = (calendarType === 'kids' || calendarType === 'shared')
+      ? calendarType
+      : (member.defaultCalendarType ?? 'shared')
+    const localEvent: LocalEvent = {
+      id: randomUUID(),
+      memberId: familyMemberId,
+      calendarType: localCalType,
+      title,
+      description,
+      location,
+      start: startISO,
+      end: endISO,
+      allDay: !!allDay,
+    }
+    await saveLocalEvent(localEvent)
+    return NextResponse.json({
+      id: `local-${localEvent.id}`,
+      externalId: localEvent.id,
+      accountId: `local:${familyMemberId}`,
+      provider: 'local',
+    })
   }
 
   const accounts = await getAccountsForMember(familyMemberId)

@@ -4,6 +4,7 @@ import type {
   ConnectedAccount,
   AppSettings,
   CalendarView,
+  LocalEvent,
 } from './calendar/types'
 
 // ── Redis client ───────────────────────────────────────────────────────────
@@ -21,6 +22,7 @@ const KEYS = {
   accountsByMember: (memberId: string) => `accounts:byMember:${memberId}`,
   settings: 'settings',
   note: (date: string) => `note:${date}`,
+  localEvents: (memberId: string) => `local-events:${memberId}`,
 } as const
 
 // ── Family Members ─────────────────────────────────────────────────────────
@@ -165,4 +167,46 @@ export async function setNote(date: string, content: string): Promise<void> {
   } else {
     await redis.del(KEYS.note(date))
   }
+}
+
+// ── Local Events (for localOnly members — kids, family) ───────────────────
+
+export async function getLocalEvents(memberId: string): Promise<LocalEvent[]> {
+  const events = await redis.get<LocalEvent[]>(KEYS.localEvents(memberId))
+  return events ?? []
+}
+
+export async function saveLocalEvent(event: LocalEvent): Promise<void> {
+  const events = await getLocalEvents(event.memberId)
+  events.push(event)
+  await redis.set(KEYS.localEvents(event.memberId), events)
+}
+
+export async function updateLocalEvent(
+  memberId: string,
+  id: string,
+  updates: Partial<Omit<LocalEvent, 'id' | 'memberId'>>
+): Promise<LocalEvent | null> {
+  const events = await getLocalEvents(memberId)
+  const idx = events.findIndex(e => e.id === id)
+  if (idx === -1) return null
+  events[idx] = { ...events[idx], ...updates }
+  await redis.set(KEYS.localEvents(memberId), events)
+  return events[idx]
+}
+
+export async function deleteLocalEvent(memberId: string, id: string): Promise<boolean> {
+  const events = await getLocalEvents(memberId)
+  const filtered = events.filter(e => e.id !== id)
+  if (filtered.length === events.length) return false
+  await redis.set(KEYS.localEvents(memberId), filtered)
+  return true
+}
+
+export async function getAllLocalEvents(): Promise<LocalEvent[]> {
+  const members = await getFamilyMembers()
+  const localMembers = members.filter(m => m.localOnly)
+  if (localMembers.length === 0) return []
+  const results = await Promise.all(localMembers.map(m => getLocalEvents(m.id)))
+  return results.flat()
 }

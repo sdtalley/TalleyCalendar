@@ -20,6 +20,8 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
   const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [color, setColor] = useState(PRESET_COLORS[0])
+  const [localOnly, setLocalOnly] = useState(false)
+  const [defaultCalendarType, setDefaultCalendarType] = useState<'kids' | 'shared'>('shared')
   const [saving, setSaving] = useState(false)
 
   function startAdd() {
@@ -27,6 +29,8 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
     setEditingId(null)
     setName('')
     setColor(PRESET_COLORS[members.length % PRESET_COLORS.length])
+    setLocalOnly(false)
+    setDefaultCalendarType('shared')
   }
 
   function startEdit(member: FamilyMember) {
@@ -34,6 +38,8 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
     setAdding(false)
     setName(member.name)
     setColor(member.color)
+    setLocalOnly(member.localOnly ?? false)
+    setDefaultCalendarType(member.defaultCalendarType ?? 'shared')
   }
 
   function cancel() {
@@ -46,10 +52,16 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
     if (!name.trim()) return
     setSaving(true)
     try {
+      const payload: Omit<FamilyMember, 'id'> = {
+        name: name.trim(),
+        color,
+        localOnly: localOnly || undefined,
+        defaultCalendarType: localOnly ? defaultCalendarType : undefined,
+      }
       if (adding) {
-        await onAdd({ name: name.trim(), color })
+        await onAdd(payload)
       } else if (editingId) {
-        await onUpdate(editingId, { name: name.trim(), color })
+        await onUpdate(editingId, payload)
       }
       cancel()
     } finally {
@@ -85,8 +97,12 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
               <MemberForm
                 name={name}
                 color={color}
+                localOnly={localOnly}
+                defaultCalendarType={defaultCalendarType}
                 onNameChange={setName}
                 onColorChange={setColor}
+                onLocalOnlyChange={setLocalOnly}
+                onDefaultCalendarTypeChange={setDefaultCalendarType}
                 onSave={handleSave}
                 onCancel={cancel}
                 saving={saving}
@@ -105,6 +121,19 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
                   <span className="text-[15px] font-medium" style={{ color: 'var(--text)' }}>
                     {member.name}
                   </span>
+                  {member.localOnly && (
+                    <span
+                      className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                      style={{
+                        background: member.defaultCalendarType === 'kids'
+                          ? 'rgba(78,205,196,0.15)'
+                          : 'rgba(108,140,255,0.15)',
+                        color: member.defaultCalendarType === 'kids' ? '#4ecdc4' : '#6c8cff',
+                      }}
+                    >
+                      {member.defaultCalendarType === 'kids' ? 'Kids · Local' : 'Family · Local'}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -130,8 +159,12 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
           <MemberForm
             name={name}
             color={color}
+            localOnly={localOnly}
+            defaultCalendarType={defaultCalendarType}
             onNameChange={setName}
             onColorChange={setColor}
+            onLocalOnlyChange={setLocalOnly}
+            onDefaultCalendarTypeChange={setDefaultCalendarType}
             onSave={handleSave}
             onCancel={cancel}
             saving={saving}
@@ -150,12 +183,18 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
 }
 
 function MemberForm({
-  name, color, onNameChange, onColorChange, onSave, onCancel, saving, saveLabel,
+  name, color, localOnly, defaultCalendarType,
+  onNameChange, onColorChange, onLocalOnlyChange, onDefaultCalendarTypeChange,
+  onSave, onCancel, saving, saveLabel,
 }: {
   name: string
   color: string
+  localOnly: boolean
+  defaultCalendarType: 'kids' | 'shared'
   onNameChange: (v: string) => void
   onColorChange: (v: string) => void
+  onLocalOnlyChange: (v: boolean) => void
+  onDefaultCalendarTypeChange: (v: 'kids' | 'shared') => void
   onSave: () => void
   onCancel: () => void
   saving: boolean
@@ -197,6 +236,61 @@ function MemberForm({
           ))}
         </div>
       </div>
+
+      {/* Local-only toggle */}
+      <div
+        className="flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer"
+        style={{ background: 'var(--surface3)', border: '1px solid var(--border)' }}
+        onClick={() => onLocalOnlyChange(!localOnly)}
+      >
+        <div>
+          <div className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>
+            No external calendar account
+          </div>
+          <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-faint)' }}>
+            Events stored locally — ideal for kids or a shared Family calendar
+          </div>
+        </div>
+        <div
+          className="w-10 h-5 rounded-full flex-shrink-0 ml-3 transition-all duration-200 relative"
+          style={{ background: localOnly ? 'var(--accent)' : 'var(--border)' }}
+        >
+          <div
+            className="absolute top-0.5 w-4 h-4 rounded-full transition-all duration-200"
+            style={{
+              background: '#fff',
+              left: localOnly ? '22px' : '2px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Calendar type — only when localOnly */}
+      {localOnly && (
+        <div className="flex flex-col gap-1.5">
+          <label className="field-label">Calendar type</label>
+          <div className="flex gap-2">
+            {([
+              { id: 'shared', label: 'Family / Shared' },
+              { id: 'kids', label: 'Kids' },
+            ] as const).map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => onDefaultCalendarTypeChange(opt.id)}
+                className="flex-1 py-2 rounded-lg text-[13px] font-medium border cursor-pointer transition-all duration-150"
+                style={{
+                  background: defaultCalendarType === opt.id ? 'var(--accent)' : 'var(--surface3)',
+                  borderColor: defaultCalendarType === opt.id ? 'var(--accent)' : 'var(--border)',
+                  color: defaultCalendarType === opt.id ? '#fff' : 'var(--text-dim)',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end gap-2 pt-1">
         <button onClick={onCancel} className="settings-btn-secondary" disabled={saving}>

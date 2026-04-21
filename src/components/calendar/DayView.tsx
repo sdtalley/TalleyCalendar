@@ -20,6 +20,45 @@ function snapToQuarter(minutes: number): number {
   return Math.round(minutes / 15) * 15
 }
 
+// Assign side-by-side column positions to overlapping timed events
+function computeColumnLayout(events: CalendarEvent[]): Array<{ ev: CalendarEvent; col: number; totalCols: number }> {
+  const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime())
+  const result: Array<{ ev: CalendarEvent; col: number; totalCols: number }> = []
+  let i = 0
+  while (i < sorted.length) {
+    // Expand cluster to include all events that overlap with any event already in it
+    let clusterEnd = sorted[i].end.getTime()
+    let j = i + 1
+    while (j < sorted.length && sorted[j].start.getTime() < clusterEnd) {
+      if (sorted[j].end.getTime() > clusterEnd) clusterEnd = sorted[j].end.getTime()
+      j++
+    }
+    const cluster = sorted.slice(i, j)
+    // Greedily assign columns within the cluster
+    const columns: CalendarEvent[][] = []
+    for (const ev of cluster) {
+      let placed = false
+      for (let c = 0; c < columns.length; c++) {
+        const last = columns[c][columns[c].length - 1]
+        if (last.end.getTime() <= ev.start.getTime()) {
+          columns[c].push(ev)
+          placed = true
+          break
+        }
+      }
+      if (!placed) columns.push([ev])
+    }
+    const totalCols = columns.length
+    for (let c = 0; c < columns.length; c++) {
+      for (const ev of columns[c]) {
+        result.push({ ev, col: c, totalCols })
+      }
+    }
+    i = j
+  }
+  return result
+}
+
 export function DayView({ currentDate, events, onEventClick, onDragCreate, onReschedule, hideHeader }: DayViewProps) {
   const today = new Date()
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -306,12 +345,14 @@ export function DayView({ currentDate, events, onEventClick, onDragCreate, onRes
             />
           )}
 
-          {timedEvents.map(ev => {
+          {computeColumnLayout(timedEvents).map(({ ev, col, totalCols }) => {
             const startMin = ev.start.getHours() * 60 + ev.start.getMinutes()
             const endMin = ev.end.getHours() * 60 + ev.end.getMinutes()
             const top = (startMin / 60) * HOUR_HEIGHT
             const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 24)
             const isBeingRescheduled = reschedView?.event.id === ev.id
+            const leftPct = (col / totalCols) * 100
+            const rightPct = ((totalCols - col - 1) / totalCols) * 100
 
             return (
               <button
@@ -325,10 +366,12 @@ export function DayView({ currentDate, events, onEventClick, onDragCreate, onRes
                   onEventClick(ev)
                 }}
                 onMouseDown={e => handleEventMouseDown(e, ev)}
-                className="absolute left-1 right-4 rounded-lg px-3 py-2 text-[13px] font-medium text-left border-none transition-all duration-100"
+                className="absolute rounded-lg px-3 py-2 text-[13px] font-medium text-left border-none transition-all duration-100"
                 style={{
                   top,
                   height,
+                  left: `calc(${leftPct}% + 1px)`,
+                  right: `calc(${rightPct}% + ${col === totalCols - 1 ? 4 : 1}px)`,
                   background: hexToRgba(ev.color, isBeingRescheduled ? 0.07 : 0.15),
                   color: ev.color,
                   borderLeft: `4px solid ${ev.color}`,

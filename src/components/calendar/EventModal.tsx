@@ -24,6 +24,11 @@ const CAL_TYPES: { id: CalendarType; label: string }[] = [
   { id: 'shared', label: 'Shared' },
 ]
 
+const LOCAL_TYPE_LABEL: Record<string, string> = {
+  kids: 'Kids (local)',
+  shared: 'Family / Shared (local)',
+}
+
 function toDateString(d: Date): string {
   return d.toISOString().split('T')[0]
 }
@@ -42,26 +47,34 @@ export function EventModal({
   onSave,
 }: EventModalProps) {
   const titleRef = useRef<HTMLInputElement>(null)
+  const selectedMember = familyMembers.find(m => m.id === (initialFamilyMemberId ?? familyMembers[0]?.id))
   const [draft, setDraft] = useState<NewEventDraft>({
     title: '',
     date: toDateString(initialDate ?? new Date()),
     startTime: '09:00',
     endTime: '10:00',
     familyMemberId: familyMembers[0]?.id ?? '',
-    calendarType: 'personal',
+    calendarType: selectedMember?.localOnly
+      ? (selectedMember.defaultCalendarType ?? 'shared')
+      : 'personal',
   })
 
   // Reset form when modal opens
   useEffect(() => {
     if (open) {
+      const memberId = initialFamilyMemberId ?? (familyMembers[0]?.id ?? '')
+      const member = familyMembers.find(m => m.id === memberId)
+      const resolvedCalType = member?.localOnly
+        ? (member.defaultCalendarType ?? 'shared')
+        : (initialCalendarType ?? 'personal')
       setDraft(prev => ({
         ...prev,
         date: toDateString(initialDate ?? new Date()),
         title: initialTitle ?? '',
         startTime: initialStartTime ?? '09:00',
         endTime: initialEndTime ?? '10:00',
-        familyMemberId: initialFamilyMemberId ?? (familyMembers[0]?.id ?? ''),
-        calendarType: initialCalendarType ?? 'personal',
+        familyMemberId: memberId,
+        calendarType: resolvedCalType,
       }))
       setTimeout(() => titleRef.current?.focus(), 50)
     }
@@ -158,7 +171,16 @@ export function EventModal({
               <label className="field-label">Person</label>
               <select
                 value={draft.familyMemberId}
-                onChange={e => setDraft(p => ({ ...p, familyMemberId: e.target.value }))}
+                onChange={e => {
+                  const m = familyMembers.find(fm => fm.id === e.target.value)
+                  setDraft(p => ({
+                    ...p,
+                    familyMemberId: e.target.value,
+                    calendarType: m?.localOnly
+                      ? (m.defaultCalendarType ?? 'shared')
+                      : p.calendarType,
+                  }))
+                }}
               >
                 {familyMembers.map(m => (
                   <option key={m.id} value={m.id}>{m.name}</option>
@@ -188,17 +210,35 @@ export function EventModal({
           </div>
 
           {/* Calendar type */}
-          <div className="flex flex-col gap-1.5">
-            <label className="field-label">Calendar</label>
-            <select
-              value={draft.calendarType}
-              onChange={e => setDraft(p => ({ ...p, calendarType: e.target.value as CalendarType }))}
-            >
-              {CAL_TYPES.map(ct => (
-                <option key={ct.id} value={ct.id}>{ct.label}</option>
-              ))}
-            </select>
-          </div>
+          {(() => {
+            const activeMember = familyMembers.find(m => m.id === draft.familyMemberId)
+            if (activeMember?.localOnly) {
+              return (
+                <div className="flex flex-col gap-1.5">
+                  <label className="field-label">Calendar</label>
+                  <div
+                    className="px-3 py-2 rounded-lg text-[13px]"
+                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}
+                  >
+                    {LOCAL_TYPE_LABEL[draft.calendarType] ?? draft.calendarType}
+                  </div>
+                </div>
+              )
+            }
+            return (
+              <div className="flex flex-col gap-1.5">
+                <label className="field-label">Calendar</label>
+                <select
+                  value={draft.calendarType}
+                  onChange={e => setDraft(p => ({ ...p, calendarType: e.target.value as CalendarType }))}
+                >
+                  {CAL_TYPES.map(ct => (
+                    <option key={ct.id} value={ct.id}>{ct.label}</option>
+                  ))}
+                </select>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Actions */}

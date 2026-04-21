@@ -231,7 +231,7 @@ Pi 3B/4/5 running:
 - [x] `POST /api/events` — create event on provider (Google Calendar API, MS Graph); optimistic local event shown immediately
 - [x] `PATCH /api/events/:id` — update event on provider (move, resize, rename); optimistic position shown during drag
 - [x] `DELETE /api/events/:id` — delete event on provider; Delete button in EventDetailModal (Google/Outlook only)
-- [x] **Drag-to-reschedule** — drag existing Google/Outlook events in Week view to new times; ghost preview during drag; cross-day supported
+- [x] **Drag-to-reschedule** — drag existing Google/Outlook events to new times; ghost preview during drag; cross-day supported in Week/Day/Hours views; Month view drag opens confirmation modal to adjust time before committing; scoped to `shared` and `kids` calendar types only (work locked to prevent accidental meeting moves; personal locked to prevent one family member moving another's events; Apple CalDAV read-only by design)
 
 #### Meals Feature ✅
 - [x] **`meal:{YYYY-MM-DD}` Redis key** — stores `{ name: string }` JSON (structured for future ingredient expansion)
@@ -239,6 +239,24 @@ Pi 3B/4/5 running:
 - [x] **Dinner pill rendering** — pinned amber pill at bottom of each day cell in Month view (amber left-border style); pinned "Dinner" band row always visible below all-day section in Week view
 - [x] **Meals tab in Lists panel** — week-by-week planner (Sun–Sat), inline click-to-edit, week navigation arrows, auto-save on blur/Enter, today highlighted with accent color
 - [x] **`MealPlanPanel.tsx`** — standalone component inside `ListsPanel.tsx` shell; `MobileListsDrawer` also renders it on mobile
+
+### Phase 2.6 — Local Members + Overlapping Events
+
+#### Local Members (Kids / Family) ✅
+- [x] **`FamilyMember.localOnly`** — optional boolean flag; when true, the member has no external calendar account and all events are stored in Redis
+- [x] **`FamilyMember.defaultCalendarType`** — `'kids' | 'shared'`; the calendarType stamped on all local events for this member
+- [x] **`LocalEvent` type** — `{ id, memberId, calendarType, title, description?, location?, start, end, allDay }` stored as JSON array at `local-events:{memberId}` in Redis
+- [x] **`src/lib/calendar/local.ts`** — `normalizeLocalEvent()` converts `LocalEvent` → `CalendarEvent` with `provider: 'local'`, `accountId: 'local:{memberId}'`
+- [x] **Redis helpers** — `getLocalEvents`, `saveLocalEvent`, `updateLocalEvent`, `deleteLocalEvent`, `getAllLocalEvents` added to `redis.ts`
+- [x] **`/api/calendars`** — fetches local events for all `localOnly` members, filters to the requested time window, normalizes, and merges into the unified event list
+- [x] **`/api/events` POST** — detects `localOnly` member; writes `LocalEvent` to Redis instead of calling a provider API; returns `provider: 'local'` response shape
+- [x] **`/api/events/[id]` PATCH/DELETE** — detects `accountId.startsWith('local:')` and routes to `updateLocalEvent` / `deleteLocalEvent` in Redis
+- [x] **Settings UI** — `FamilyMemberList.tsx` "No external calendar account" toggle in member form; when enabled, Kids / Family·Shared type picker appears; member list shows colored badge ("Kids · Local" / "Family · Local")
+- [x] **`EventModal.tsx`** — localOnly member selected → calendar type field locked to member's `defaultCalendarType`; switching Person auto-updates type
+
+#### Overlapping Events Side-by-Side in Hours / Day View ✅
+- [x] **`computeColumnLayout()`** — greedy column-assignment algorithm in `DayView.tsx`; sorts events by start, builds overlap clusters, assigns each event a `(col, totalCols)` pair
+- [x] **Side-by-side rendering** — each timed event uses `left: calc(col/totalCols * 100% + 1px)` / `right: calc((totalCols-col-1)/totalCols * 100% + Npx)`; non-overlapping events continue to use full width
 
 ### Phase 3 — Home Assistant Integration
 
@@ -283,6 +301,7 @@ Redis key structure:
   oauth:nonce:{nonce}                → one-time nonce for OAuth CSRF (10-min TTL)
   note:{YYYY-MM-DD}                  → string (daily notes)
   meal:{YYYY-MM-DD}                  → JSON MealPlan object { name: string } (expandable to ingredients)
+  local-events:{memberId}            → JSON array of LocalEvent objects (for localOnly members)
 ```
 
 ```typescript
@@ -453,6 +472,7 @@ TalleyCalendar/
 │           ├── google.ts             ← Google Calendar API client (token refresh, fetch)
 │           ├── outlook.ts            ← Microsoft Graph API client (token refresh, fetch)
 │           ├── apple.ts              ← CalDAV client (tsdav), iCal parser (VEVENT scoping)
+│           ├── local.ts              ← normalizeLocalEvent(): LocalEvent → CalendarEvent for localOnly members
 │           └── recurrence.ts         ← rrule-based recurring event expansion
 ```
 
@@ -570,6 +590,8 @@ interface FamilyMember {
   id: string
   name: string
   color: string
+  localOnly?: boolean                       // no external account; events stored in Redis
+  defaultCalendarType?: 'kids' | 'shared'  // calendarType applied to all local events
 }
 
 // ── Connected Account (stored in Redis per-account) ──
@@ -616,6 +638,19 @@ interface CalendarEvent {
     calendarName: string
     provider: CalendarProvider
   }
+}
+
+// ── Local Event (Redis-stored for localOnly members — kids, family) ──
+interface LocalEvent {
+  id: string
+  memberId: string
+  calendarType: 'kids' | 'shared'
+  title: string
+  description?: string
+  location?: string
+  start: string   // ISO string
+  end: string     // ISO string
+  allDay: boolean
 }
 
 // ── Meal Plan (stored per-day in Redis, separate from CalendarEvents) ──
