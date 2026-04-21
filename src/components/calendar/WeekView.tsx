@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { getWeekDates, sameDay, eventSpansDay, hexToRgba } from '@/lib/utils'
+import { getWeekDates, sameDay, eventSpansDay, hexToRgba, formatTime } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
@@ -175,7 +175,7 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
     dayIndex: number
   ) => {
     if (!onReschedule || (ev.provider !== 'google' && ev.provider !== 'outlook')) return
-    if (ev.calendarType !== 'shared' && ev.calendarType !== 'kids') return
+    if (ev.calendarType === 'work') return
 
     e.stopPropagation() // prevent column drag-to-create from starting
 
@@ -250,6 +250,10 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
 
       if (rref?.moved && pos && onReschedule) {
         suppressClickRef.current = rref.event.id
+        if (rref.event.calendarType === 'personal') {
+          const newTime = formatTime(new Date(0, 0, 0, Math.floor(pos.topMin / 60), pos.topMin % 60))
+          if (!window.confirm(`Move "${rref.event.title}" to ${newTime}?\n\nThis is a personal event.`)) return
+        }
         onReschedule(rref.event, weekDates[pos.dayIndex], pos.topMin)
       }
     }
@@ -476,7 +480,7 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
                       opacity: isBeingRescheduled ? 0.4 : 1,
                       zIndex: 2,
                       lineHeight: 1.3,
-                      cursor: onReschedule && (ev.provider === 'google' || ev.provider === 'outlook') && (ev.calendarType === 'shared' || ev.calendarType === 'kids') ? 'grab' : 'pointer',
+                      cursor: onReschedule && (ev.provider === 'google' || ev.provider === 'outlook') && ev.calendarType !== 'work' ? 'grab' : 'pointer',
                     }}
                     onMouseEnter={e => {
                       if (!isBeingRescheduled) {

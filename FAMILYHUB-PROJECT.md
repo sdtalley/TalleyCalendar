@@ -231,7 +231,7 @@ Pi 3B/4/5 running:
 - [x] `POST /api/events` — create event on provider (Google Calendar API, MS Graph); optimistic local event shown immediately
 - [x] `PATCH /api/events/:id` — update event on provider (move, resize, rename); optimistic position shown during drag
 - [x] `DELETE /api/events/:id` — delete event on provider; Delete button in EventDetailModal (Google/Outlook only)
-- [x] **Drag-to-reschedule** — drag existing Google/Outlook events to new times; ghost preview during drag; cross-day supported in Week/Day/Hours views; Month view drag opens confirmation modal to adjust time before committing; scoped to `shared` and `kids` calendar types only (work locked to prevent accidental meeting moves; personal locked to prevent one family member moving another's events; Apple CalDAV read-only by design)
+- [x] **Drag-to-reschedule** — drag existing Google/Outlook events to new times; ghost preview during drag; cross-day supported in Week/Day/Hours views; Month view drag opens confirmation modal to adjust time before committing; allowed for `personal`, `shared`, and `kids` calendar types; `work` is locked to prevent accidental meeting moves; Apple CalDAV read-only by design
 
 #### Meals Feature ✅
 - [x] **`meal:{YYYY-MM-DD}` Redis key** — stores `{ name: string }` JSON (structured for future ingredient expansion)

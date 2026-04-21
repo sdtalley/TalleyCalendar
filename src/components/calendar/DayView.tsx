@@ -184,7 +184,7 @@ export function DayView({ currentDate, events, onEventClick, onDragCreate, onRes
   // Drag-to-reschedule: start on event mousedown
   const handleEventMouseDown = useCallback((e: React.MouseEvent, ev: CalendarEvent) => {
     if (!onReschedule || (ev.provider !== 'google' && ev.provider !== 'outlook')) return
-    if (ev.calendarType !== 'shared' && ev.calendarType !== 'kids') return
+    if (ev.calendarType === 'work') return
 
     e.stopPropagation()
 
@@ -236,6 +236,10 @@ export function DayView({ currentDate, events, onEventClick, onDragCreate, onRes
 
       if (rref?.moved && pos !== null && onReschedule) {
         suppressClickRef.current = rref.event.id
+        if (rref.event.calendarType === 'personal') {
+          const newTime = formatTime(new Date(0, 0, 0, Math.floor(pos / 60), pos % 60))
+          if (!window.confirm(`Move "${rref.event.title}" to ${newTime}?\n\nThis is a personal event.`)) return
+        }
         onReschedule(rref.event, currentDate, pos)
       }
     }
@@ -377,7 +381,7 @@ export function DayView({ currentDate, events, onEventClick, onDragCreate, onRes
                   borderLeft: `4px solid ${ev.color}`,
                   opacity: isBeingRescheduled ? 0.4 : 1,
                   zIndex: 2,
-                  cursor: onReschedule && (ev.provider === 'google' || ev.provider === 'outlook') && (ev.calendarType === 'shared' || ev.calendarType === 'kids') ? 'grab' : 'pointer',
+                  cursor: onReschedule && (ev.provider === 'google' || ev.provider === 'outlook') && ev.calendarType !== 'work' ? 'grab' : 'pointer',
                 }}
                 onMouseEnter={e => { if (!isBeingRescheduled) e.currentTarget.style.filter = 'brightness(1.15)' }}
                 onMouseLeave={e => { e.currentTarget.style.filter = '' }}

@@ -84,7 +84,7 @@ export function MonthView({
 
   function handleEventPillMouseDown(e: React.MouseEvent, ev: CalendarEvent, originDate: Date) {
     if (!onMonthReschedule || (ev.provider !== 'google' && ev.provider !== 'outlook')) return
-    if (ev.calendarType !== 'shared' && ev.calendarType !== 'kids') return
+    if (ev.calendarType === 'work') return
 
     e.stopPropagation() // prevent day-cell select
     e.preventDefault()
@@ -270,7 +270,7 @@ export function MonthView({
                       className="text-[11px] px-1.5 py-[2px] rounded text-left font-medium leading-[1.5] w-full border-none cursor-pointer transition-all duration-100 overflow-hidden"
                       style={{
                         opacity: isDragging ? 0.35 : 1,
-                        cursor: onMonthReschedule && (ev.provider === 'google' || ev.provider === 'outlook') && (ev.calendarType === 'shared' || ev.calendarType === 'kids') ? 'grab' : 'pointer',
+                        cursor: onMonthReschedule && (ev.provider === 'google' || ev.provider === 'outlook') && ev.calendarType !== 'work' ? 'grab' : 'pointer',
                         ...(isAllDayStyle
                           ? { background: hexToRgba(ev.color, 0.3), color: ev.color, borderRadius: '3px' }
                           : { background: hexToRgba(ev.color, 0.13), color: ev.color, borderLeft: `3px solid ${ev.color}` }),
