@@ -93,15 +93,11 @@ export function TopBar({
           <Clock />
         </div>
 
-        {/* Col 3 — right: member chips + filters + search + views + add */}
+        {/* Col 3 — right: members dropdown + filters + search + views + add */}
         <div className="flex items-center gap-2 justify-end">
-          {/* Family member chips */}
+          {/* Members dropdown */}
           {familyMembers && familyMembers.length > 0 && onToggleMember && (
-            <div className="flex items-center gap-1.5">
-              {familyMembers.map(m => (
-                <MemberChip key={m.id} member={m} onToggle={onToggleMember} />
-              ))}
-            </div>
+            <MembersDropdown familyMembers={familyMembers} onToggleMember={onToggleMember} />
           )}
 
           {/* Filters dropdown (calendar types) */}
@@ -385,52 +381,114 @@ function MobileFiltersSheet({
   )
 }
 
-/* ── Member chip ── */
+/* ── Members dropdown ── */
 
-function MemberChip({
-  member,
-  onToggle,
-  compact = false,
+function MembersDropdown({
+  familyMembers,
+  onToggleMember,
 }: {
-  member: FamilyMemberUI
-  onToggle: (id: string) => void
-  compact?: boolean
+  familyMembers: FamilyMemberUI[]
+  onToggleMember: (id: string) => void
 }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  const anyDisabled = familyMembers.some(m => !m.enabled)
+
   return (
-    <button
-      onClick={() => onToggle(member.id)}
-      title={member.name}
-      className="flex items-center gap-1.5 rounded-full transition-all duration-150 cursor-pointer flex-shrink-0"
-      style={{
-        padding: compact ? '3px 8px 3px 6px' : '4px 10px 4px 8px',
-        background: member.enabled ? 'var(--surface2)' : 'transparent',
-        border: `1px solid ${member.enabled ? member.color + '60' : 'var(--border)'}`,
-        opacity: member.enabled ? 1 : 0.45,
-      }}
-    >
-      <span
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 rounded-[8px] text-[12px] font-medium cursor-pointer transition-all duration-150 flex-shrink-0"
         style={{
-          width: compact ? 8 : 10,
-          height: compact ? 8 : 10,
-          borderRadius: '50%',
-          background: member.enabled ? member.color : 'var(--text-faint)',
-          flexShrink: 0,
-          display: 'inline-block',
+          padding: '5px 10px',
+          background: open || anyDisabled ? 'var(--accent-glow)' : 'var(--surface2)',
+          border: `1px solid ${open || anyDisabled ? 'var(--accent)' : 'var(--border)'}`,
+          color: open || anyDisabled ? 'var(--accent)' : 'var(--text-dim)',
         }}
-      />
-      {!compact && (
-        <span
+      >
+        <span>Members</span>
+        {anyDisabled && (
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: 'var(--accent)',
+              display: 'inline-block',
+            }}
+          />
+        )}
+      </button>
+
+      {open && (
+        <div
           style={{
-            fontSize: 12,
-            fontWeight: 500,
-            color: member.enabled ? 'var(--text)' : 'var(--text-dim)',
-            whiteSpace: 'nowrap',
+            position: 'absolute',
+            top: 'calc(100% + 6px)',
+            right: 0,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+            minWidth: 180,
+            zIndex: 50,
+            overflow: 'hidden',
           }}
         >
-          {member.name}
-        </span>
+          <div
+            style={{
+              padding: '8px 12px 6px',
+              fontSize: 10,
+              fontWeight: 600,
+              color: 'var(--text-faint)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              borderBottom: '1px solid var(--border)',
+            }}
+          >
+            Family Members
+          </div>
+          {familyMembers.map(m => (
+            <button
+              key={m.id}
+              onClick={() => onToggleMember(m.id)}
+              className="flex items-center gap-2.5 w-full text-left cursor-pointer transition-colors duration-100"
+              style={{
+                padding: '8px 12px',
+                background: 'transparent',
+                border: 'none',
+                color: m.enabled ? 'var(--text)' : 'var(--text-dim)',
+                opacity: m.enabled ? 1 : 0.6,
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface2)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: m.enabled ? m.color : 'var(--text-faint)',
+                  flexShrink: 0,
+                  display: 'inline-block',
+                }}
+              />
+              <span style={{ fontSize: 13 }}>{m.name}</span>
+            </button>
+          ))}
+        </div>
       )}
-    </button>
+    </div>
   )
 }
 

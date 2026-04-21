@@ -103,12 +103,12 @@ Pi 3B/4/5 running:
 - Default widths: Lists ~280px, Hours/Agenda ~300px
 
 ### Filter Relocation (left sidebar removed)
-- **Family member toggles** → TopBar avatar chip buttons (colored dot + name, tap to toggle, dims when off)
+- **Family member toggles** → TopBar **Members** dropdown button (colored dot + name per row; accent dot indicator when any member is hidden)
 - **Calendar type filters** → "Filters" dropdown button in TopBar (used rarely; hidden until needed)
 - Left sidebar is fully retired; its space becomes the Lists panel
 
 ### Mobile Layout
-- TopBar avatar chips remain visible (compact)
+- TopBar **Members** dropdown button remains visible (opens bottom sheet with member toggles on mobile)
 - Lists panel → bottom drawer via a list/menu icon button (same pattern as MobileDayDrawer)
 - Hours/Agenda → bottom sheet on day tap (unchanged)
 - Both sidebars hidden; full-width calendar preserved
@@ -217,7 +217,7 @@ Pi 3B/4/5 running:
 
 #### Layout Redesign ✅
 - [x] **Remove left sidebar** (`Sidebar.tsx`) — retired; `ListsPanel` occupies left slot
-- [x] **TopBar filter chips** — family member avatar chips (colored, tap-to-toggle, dim when off) inline in TopBar
+- [x] **TopBar Members dropdown** — **Members** button in TopBar opens a dropdown with colored dot + name + toggle per member; accent dot on button when any member is hidden (subsequently replaced inline chips — see Phase 2.6)
 - [x] **TopBar filter dropdown** — "Filters" button for calendar type toggles (Personal/Work/Kids/Shared)
 - [x] **Lists panel** (left side, resizable 220–520px + collapsible to 44px icon strip) — shell with Meals / Shopping / To-Do tabs; Shopping and To-Do are stubs
 - [x] **Mobile Lists drawer** — `MobileListsDrawer` bottom sheet via ☰ button in mobile TopBar row 2
@@ -260,7 +260,8 @@ Pi 3B/4/5 running:
 - [x] **Side-by-side rendering** — each timed event uses `left: calc(col/totalCols * 100% + 1px)` / `right: calc((totalCols-col-1)/totalCols * 100% + Npx)`; non-overlapping events continue to use full width
 
 #### Filter Persistence ✅
-- [x] **`localStorage` filter persistence** — `useEventFilters` saves `disabledMembers` (Set of member IDs) and `calTypes` (enabled flags) to `localStorage` on every change (`talley_disabled_members`, `talley_cal_types` keys); lazy initializers restore the saved state on page load/refresh; falls back to all-enabled defaults if nothing is saved or storage is unavailable
+- [x] **`localStorage` filter persistence** — `useEventFilters` saves `disabledMembers` (Set of member IDs) and `calTypes` (enabled flags) to `localStorage` on every change (`talley_disabled_members`, `talley_cal_types` keys); state loads from `localStorage` in a `useEffect` after mount (SSR-safe — server has no `localStorage`); a `hydrated` ref guards the save effects so they don't overwrite stored values before the load fires; falls back to all-enabled defaults if nothing is saved or storage is unavailable
+- [x] **Members dropdown** — desktop TopBar replaces inline member chips with a single `Members` button (matching the `Filters` dropdown style); dropdown lists all members with colored dot + name + toggle; button shows an accent dot indicator when any member is hidden; frees significant horizontal space in the TopBar; `MemberChip` component removed
 
 #### Drag Policy Refinement ✅
 - [x] **Personal events unlocked** — `personal` calendar type is now draggable/reschedulable (was previously locked alongside `work`); only `work` remains locked
@@ -460,7 +461,7 @@ TalleyCalendar/
 │   │   │   ├── AccountList.tsx       ← list connected accounts per member; amber Reconnect button when reauth_needed (Google/Outlook)
 │   │   │   └── AddAccountFlow.tsx    ← provider picker + OAuth redirect / Apple form
 │   │   └── layout/
-│   │       ├── TopBar.tsx            ← 3-column grid; family member chip toggles; Filters dropdown; mobile ☰ Lists button
+│   │       ├── TopBar.tsx            ← 3-column grid; Members dropdown + Filters dropdown; mobile ☰ Lists button
 │   │       ├── Sidebar.tsx           ← RETIRED — file kept for reference; no longer rendered
 │   │       ├── Clock.tsx             ← live clock display
 │   │       └── WeatherWidget.tsx     ← current weather in top bar
@@ -818,7 +819,7 @@ Redis                               ├─ google.ts → Google Calendar API
 - [x] **Microsoft work accounts**: ~~Personal accounts only~~ → **Multitenant + personal** Azure app registration, supports both work (Entra ID) and personal accounts.
 - [x] **Settings access control**: ~~Should Settings require a PIN?~~ → **Yes**, optional numeric PIN gate implemented for kiosk mode.
 - [x] **Event write-back**: When creating an event, which calendar does it write to? → **`defaultWriteCalendarId` per `ConnectedAccount`**, configurable in account settings UI as a dropdown of that account's enabled calendars; falls back to `"primary"`. No prompt at event creation time — keeps the flow simple.
-- [x] **UI layout**: Is the left sidebar worth the real estate? → **No.** Left sidebar retired. Family member toggles move to TopBar avatar chips; calendar type filters behind a TopBar dropdown. Left space becomes a resizable/collapsible **Lists panel** (Meals / Shopping / To-Do). Right sidebar stays as Hours/Agenda.
+- [x] **UI layout**: Is the left sidebar worth the real estate? → **No.** Left sidebar retired. Family member toggles move to a TopBar **Members** dropdown; calendar type filters behind a TopBar **Filters** dropdown. Left space becomes a resizable/collapsible **Lists panel** (Meals / Shopping / To-Do). Right sidebar stays as Hours/Agenda.
 - [x] **Dinner / Meals**: CalendarType or own data model? → **Own model.** `meal:{YYYY-MM-DD}` JSON in Redis, separate from the event system. Rendered as a pinned no-time amber pill at the bottom of day cells. Not a CalendarType.
 - [ ] **Sync frequency**: 5 minutes default — is this fast enough? Could use webhooks for Google/Outlook for near-real-time.
 - [ ] **Offline handling**: Should the app cache events locally (service worker) so it still shows data if internet drops?

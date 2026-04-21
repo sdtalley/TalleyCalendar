@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import type { CalendarEvent, FamilyMemberUI } from '@/lib/calendar/types'
 
 const LS_DISABLED_MEMBERS = 'talley_disabled_members'
@@ -39,14 +39,25 @@ export function useEventFilters(
   allEvents: CalendarEvent[],
   members: FamilyMemberUI[]
 ) {
-  const [disabledMembers, setDisabledMembers] = useState<Set<string>>(loadDisabledMembers)
-  const [calTypes, setCalTypes] = useState(loadCalTypes)
+  // Start with defaults; load from localStorage after mount (SSR has no localStorage)
+  const [disabledMembers, setDisabledMembers] = useState<Set<string>>(new Set())
+  const [calTypes, setCalTypes] = useState(DEFAULT_CAL_TYPES)
+  // Guard prevents save effects from overwriting storage before the load fires
+  const hydrated = useRef(false)
 
   useEffect(() => {
+    setDisabledMembers(loadDisabledMembers())
+    setCalTypes(loadCalTypes())
+    hydrated.current = true
+  }, [])
+
+  useEffect(() => {
+    if (!hydrated.current) return
     localStorage.setItem(LS_DISABLED_MEMBERS, JSON.stringify([...disabledMembers]))
   }, [disabledMembers])
 
   useEffect(() => {
+    if (!hydrated.current) return
     localStorage.setItem(LS_CAL_TYPES, JSON.stringify(calTypes.map(ct => ({ id: ct.id, enabled: ct.enabled }))))
   }, [calTypes])
 
