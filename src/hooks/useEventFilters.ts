@@ -53,7 +53,7 @@ export function useEventFilters(
 
   useEffect(() => {
     if (!hydrated.current) return
-    localStorage.setItem(LS_DISABLED_MEMBERS, JSON.stringify([...disabledMembers]))
+    localStorage.setItem(LS_DISABLED_MEMBERS, JSON.stringify(Array.from(disabledMembers)))
   }, [disabledMembers])
 
   useEffect(() => {
