@@ -231,7 +231,8 @@ Pi 3B/4/5 running:
 - [x] `POST /api/events` — create event on provider (Google Calendar API, MS Graph); optimistic local event shown immediately
 - [x] `PATCH /api/events/:id` — update event on provider (move, resize, rename); optimistic position shown during drag
 - [x] `DELETE /api/events/:id` — delete event on provider; Delete button in EventDetailModal (Google/Outlook only)
-- [x] **Drag-to-reschedule** — drag existing Google/Outlook events to new times; ghost preview during drag; cross-day supported in Week/Day/Hours views; Month view drag opens confirmation modal to adjust time before committing; allowed for `personal`, `shared`, and `kids` calendar types; `work` is locked to prevent accidental meeting moves; Apple CalDAV read-only by design
+- [x] **Drag-to-reschedule** — drag existing Google/Outlook events to new times; ghost preview during drag; cross-day supported in Week/Day/Hours views; Month view drag opens confirmation modal to adjust time before committing; `work` locked to prevent accidental meeting moves; Apple CalDAV read-only by design
+- [x] **Personal event drag confirmation** — dragging a `personal` calendar event in Week/Day/Hours views shows a `window.confirm` dialog ("Move '[title]' to [time]? This is a personal event.") before committing; prevents accidental moves by other family members on the shared kiosk display; Month view already requires explicit Save in its time-adjust modal so no additional confirm needed there
 
 #### Meals Feature ✅
 - [x] **`meal:{YYYY-MM-DD}` Redis key** — stores `{ name: string }` JSON (structured for future ingredient expansion)
@@ -257,6 +258,13 @@ Pi 3B/4/5 running:
 #### Overlapping Events Side-by-Side in Hours / Day View ✅
 - [x] **`computeColumnLayout()`** — greedy column-assignment algorithm in `DayView.tsx`; sorts events by start, builds overlap clusters, assigns each event a `(col, totalCols)` pair
 - [x] **Side-by-side rendering** — each timed event uses `left: calc(col/totalCols * 100% + 1px)` / `right: calc((totalCols-col-1)/totalCols * 100% + Npx)`; non-overlapping events continue to use full width
+
+#### Filter Persistence ✅
+- [x] **`localStorage` filter persistence** — `useEventFilters` saves `disabledMembers` (Set of member IDs) and `calTypes` (enabled flags) to `localStorage` on every change (`talley_disabled_members`, `talley_cal_types` keys); lazy initializers restore the saved state on page load/refresh; falls back to all-enabled defaults if nothing is saved or storage is unavailable
+
+#### Drag Policy Refinement ✅
+- [x] **Personal events unlocked** — `personal` calendar type is now draggable/reschedulable (was previously locked alongside `work`); only `work` remains locked
+- [x] **Personal drag confirmation** — Week/Day/Hours views show `window.confirm` before committing a personal event reschedule; prevents accidental moves on the shared kiosk by other family members; Month view's existing time-adjust modal already satisfies this requirement
 
 ### Phase 3 — Home Assistant Integration
 
@@ -459,7 +467,7 @@ TalleyCalendar/
 │   ├── hooks/
 │   │   ├── useCalendarEvents.ts      ← fetches /api/calendars + /api/family; per-month SWR cache, directional prefetch, shimmer on cold miss, 5-min poll
 │   │   ├── useCalendarNavigation.ts  ← view state, date navigation
-│   │   ├── useEventFilters.ts        ← family/type toggles via disabledMembers Set
+│   │   ├── useEventFilters.ts        ← family/type toggles via disabledMembers Set; persists to localStorage on change, restores on load
 │   │   └── useScreenDim.ts           ← screen dimming based on schedule from Redis
 │   └── lib/
 │       ├── auth.ts                   ← HMAC-SHA256 session token creation/verification

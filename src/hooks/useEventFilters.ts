@@ -1,7 +1,10 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import type { CalendarEvent, FamilyMemberUI } from '@/lib/calendar/types'
+
+const LS_DISABLED_MEMBERS = 'talley_disabled_members'
+const LS_CAL_TYPES = 'talley_cal_types'
 
 export const DEFAULT_CAL_TYPES = [
   { id: 'personal', name: 'Personal', enabled: true },
@@ -10,13 +13,42 @@ export const DEFAULT_CAL_TYPES = [
   { id: 'shared', name: 'Shared / Family', enabled: true },
 ]
 
+function loadDisabledMembers(): Set<string> {
+  try {
+    const raw = localStorage.getItem(LS_DISABLED_MEMBERS)
+    if (raw) return new Set(JSON.parse(raw) as string[])
+  } catch {}
+  return new Set()
+}
+
+function loadCalTypes() {
+  try {
+    const raw = localStorage.getItem(LS_CAL_TYPES)
+    if (raw) {
+      const saved = JSON.parse(raw) as { id: string; enabled: boolean }[]
+      return DEFAULT_CAL_TYPES.map(ct => {
+        const match = saved.find(s => s.id === ct.id)
+        return match ? { ...ct, enabled: match.enabled } : ct
+      })
+    }
+  } catch {}
+  return DEFAULT_CAL_TYPES
+}
+
 export function useEventFilters(
   allEvents: CalendarEvent[],
   members: FamilyMemberUI[]
 ) {
-  // Only store toggle overrides — the member list itself comes from props
-  const [disabledMembers, setDisabledMembers] = useState<Set<string>>(new Set())
-  const [calTypes, setCalTypes] = useState(DEFAULT_CAL_TYPES)
+  const [disabledMembers, setDisabledMembers] = useState<Set<string>>(loadDisabledMembers)
+  const [calTypes, setCalTypes] = useState(loadCalTypes)
+
+  useEffect(() => {
+    localStorage.setItem(LS_DISABLED_MEMBERS, JSON.stringify([...disabledMembers]))
+  }, [disabledMembers])
+
+  useEffect(() => {
+    localStorage.setItem(LS_CAL_TYPES, JSON.stringify(calTypes.map(ct => ({ id: ct.id, enabled: ct.enabled }))))
+  }, [calTypes])
 
   // Derive familyMembers from props + toggle state on every render (no lag)
   const familyMembers: FamilyMemberUI[] = useMemo(
