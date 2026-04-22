@@ -5,7 +5,26 @@ import {
   updateFamilyMember,
   removeFamilyMember,
 } from '@/lib/redis'
-import type { FamilyMember } from '@/lib/calendar/types'
+import { parseBody, z } from '@/lib/validate'
+
+const PostSchema = z.object({
+  name: z.string().min(1),
+  color: z.string().min(1),
+  localOnly: z.boolean().optional(),
+  defaultCalendarType: z.enum(['kids', 'shared']).optional(),
+})
+
+const PatchSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).optional(),
+  color: z.string().min(1).optional(),
+  localOnly: z.boolean().optional(),
+  defaultCalendarType: z.enum(['kids', 'shared']).optional(),
+})
+
+const DeleteSchema = z.object({
+  id: z.string().min(1),
+})
 
 // GET /api/family — list all family members
 export async function GET() {
@@ -14,19 +33,13 @@ export async function GET() {
 }
 
 // POST /api/family — add a family member
-// Body: { name: string, color: string }
 export async function POST(req: NextRequest) {
-  const body = await req.json()
-  const { name, color } = body
+  const result = await parseBody(req, PostSchema)
+  if (result.error) return result.response
 
-  if (!name || !color) {
-    return NextResponse.json({ error: 'name and color are required' }, { status: 400 })
-  }
-
-  const member: FamilyMember = {
+  const member = {
     id: crypto.randomUUID(),
-    name,
-    color,
+    ...result.data,
   }
 
   await addFamilyMember(member)
@@ -34,15 +47,11 @@ export async function POST(req: NextRequest) {
 }
 
 // PATCH /api/family — update a family member
-// Body: { id: string, name?: string, color?: string }
 export async function PATCH(req: NextRequest) {
-  const body = await req.json()
-  const { id, ...updates } = body
+  const result = await parseBody(req, PatchSchema)
+  if (result.error) return result.response
 
-  if (!id) {
-    return NextResponse.json({ error: 'id is required' }, { status: 400 })
-  }
-
+  const { id, ...updates } = result.data
   const updated = await updateFamilyMember(id, updates)
   if (!updated) {
     return NextResponse.json({ error: 'member not found' }, { status: 404 })
@@ -52,16 +61,11 @@ export async function PATCH(req: NextRequest) {
 }
 
 // DELETE /api/family — remove a family member and all their accounts
-// Body: { id: string }
 export async function DELETE(req: NextRequest) {
-  const body = await req.json()
-  const { id } = body
+  const result = await parseBody(req, DeleteSchema)
+  if (result.error) return result.response
 
-  if (!id) {
-    return NextResponse.json({ error: 'id is required' }, { status: 400 })
-  }
-
-  const removed = await removeFamilyMember(id)
+  const removed = await removeFamilyMember(result.data.id)
   if (!removed) {
     return NextResponse.json({ error: 'member not found' }, { status: 404 })
   }
