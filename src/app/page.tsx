@@ -124,19 +124,6 @@ export default function CalendarPage() {
     setModalOpen(true)
   }
 
-  function handleDragCreate(date: Date, startMinutes: number, endMinutes: number) {
-    const sh = Math.floor(startMinutes / 60)
-    const sm = startMinutes % 60
-    const eh = Math.floor(endMinutes / 60)
-    const em = endMinutes % 60
-    setModalInitialDate(date)
-    setDragTimeRange({
-      startTime: `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`,
-      endTime: `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`,
-    })
-    setModalOpen(true)
-  }
-
   // Month-view drag to a new day — open EventModal pre-filled for confirmation
   function handleMonthReschedule(event: CalendarEvent, newDate: Date) {
     setPendingMonthReschedule(event)
@@ -404,7 +391,6 @@ export default function CalendarPage() {
               currentDate={currentDate}
               events={displayEvents}
               onEventClick={handleEventClick}
-              onDragCreate={handleDragCreate}
               onReschedule={handleRescheduleEvent}
             />
           )}
@@ -413,7 +399,6 @@ export default function CalendarPage() {
               currentDate={currentDate}
               events={displayEvents}
               onEventClick={handleEventClick}
-              onDragCreate={handleDragCreate}
             />
           )}
         </div>
@@ -424,7 +409,6 @@ export default function CalendarPage() {
             selectedDate={selectedDate}
             events={displayEvents}
             onEventClick={handleEventClick}
-            onDragCreate={handleDragCreate}
             onReschedule={handleRescheduleEvent}
           />
         </div>

@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useDrag } from '@use-gesture/react'
 import { getWeekDates, sameDay, eventSpansDay, hexToRgba, formatTime } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
@@ -11,37 +12,193 @@ function toDateKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-interface WeekViewProps {
-  currentDate: Date
-  events: CalendarEvent[]
-  onEventClick: (event: CalendarEvent) => void
-  onDragCreate?: (date: Date, startMinutes: number, endMinutes: number) => void
-  onReschedule?: (event: CalendarEvent, newDate: Date, newStartMinutes: number) => void
-}
-
 function snapToQuarter(minutes: number): number {
   return Math.round(minutes / 15) * 15
 }
 
-export function WeekView({ currentDate, events, onEventClick, onDragCreate, onReschedule }: WeekViewProps) {
+interface WeekViewProps {
+  currentDate: Date
+  events: CalendarEvent[]
+  onEventClick: (event: CalendarEvent) => void
+  onReschedule?: (event: CalendarEvent, newDate: Date, newStartMinutes: number) => void
+}
+
+// ── DraggableEventBlock ────────────────────────────────────────────────────
+
+interface DraggableEventBlockProps {
+  ev: CalendarEvent
+  top: number
+  height: number
+  dayIndex: number
+  columnRefs: React.MutableRefObject<(HTMLDivElement | null)[]>
+  bodyRef: React.RefObject<HTMLDivElement>
+  weekDates: Date[]
+  onEventClick: (ev: CalendarEvent) => void
+  onReschedule?: (ev: CalendarEvent, newDate: Date, topMin: number) => void
+  onGhostChange: (ghost: { dayIndex: number; topMin: number; event: CalendarEvent } | null) => void
+  isGhosting: boolean
+}
+
+function DraggableEventBlock({
+  ev, top, height, dayIndex, columnRefs, bodyRef, weekDates,
+  onEventClick, onReschedule, onGhostChange, isGhosting,
+}: DraggableEventBlockProps) {
+  const isDraggable = !!onReschedule &&
+    (ev.provider === 'google' || ev.provider === 'outlook') &&
+    ev.calendarType !== 'work'
+
+  const startMin = ev.start.getHours() * 60 + ev.start.getMinutes()
+  const durationMin = Math.max(15, (ev.end.getTime() - ev.start.getTime()) / 60000)
+
+  const clickOffsetRef = useRef(0)
+  const ghostPosRef = useRef<{ dayIndex: number; topMin: number } | null>(null)
+  const lastXYRef = useRef<[number, number] | null>(null)
+  const scrollAnimRef = useRef<number | null>(null)
+
+  function computeGhost(clientX: number, clientY: number) {
+    let targetDayIndex = dayIndex
+    let targetCol = columnRefs.current[targetDayIndex]
+    for (let i = 0; i < columnRefs.current.length; i++) {
+      const c = columnRefs.current[i]
+      if (!c) continue
+      const r = c.getBoundingClientRect()
+      if (clientX >= r.left && clientX <= r.right) {
+        targetDayIndex = i
+        targetCol = c
+        break
+      }
+    }
+    if (!targetCol) return
+    const rect = targetCol.getBoundingClientRect()
+    const y = clientY - rect.top + (bodyRef.current?.scrollTop ?? 0)
+    const topMin = snapToQuarter(
+      Math.max(0, Math.min(24 * 60 - durationMin, (y / (24 * HOUR_HEIGHT)) * 1440 - clickOffsetRef.current))
+    )
+    ghostPosRef.current = { dayIndex: targetDayIndex, topMin }
+    onGhostChange({ dayIndex: targetDayIndex, topMin, event: ev })
+  }
+
+  function stopEdgeScroll() {
+    if (scrollAnimRef.current !== null) {
+      cancelAnimationFrame(scrollAnimRef.current)
+      scrollAnimRef.current = null
+    }
+  }
+
+  function startEdgeScroll() {
+    if (scrollAnimRef.current !== null) return
+    const EDGE_ZONE = 60
+    const MAX_SPEED = 10
+    function tick() {
+      const xy = lastXYRef.current
+      const body = bodyRef.current
+      if (!xy || !body) { scrollAnimRef.current = null; return }
+      const rect = body.getBoundingClientRect()
+      const distTop = xy[1] - rect.top
+      const distBot = rect.bottom - xy[1]
+      let delta = 0
+      if (distTop < EDGE_ZONE && distTop >= 0) delta = -MAX_SPEED * (1 - distTop / EDGE_ZONE)
+      else if (distBot < EDGE_ZONE && distBot >= 0) delta = MAX_SPEED * (1 - distBot / EDGE_ZONE)
+      if (delta !== 0) {
+        body.scrollTop += delta
+        computeGhost(xy[0], xy[1])
+      }
+      scrollAnimRef.current = requestAnimationFrame(tick)
+    }
+    scrollAnimRef.current = requestAnimationFrame(tick)
+  }
+
+  const bind = useDrag(
+    ({ first, last, tap, xy: [cx, cy] }) => {
+      if (tap) return
+
+      if (first) {
+        const col = columnRefs.current[dayIndex]
+        const rect = col?.getBoundingClientRect()
+        const scrollTop = bodyRef.current?.scrollTop ?? 0
+        const clickMin = rect
+          ? snapToQuarter(((cy - rect.top + scrollTop) / (24 * HOUR_HEIGHT)) * 1440)
+          : startMin
+        clickOffsetRef.current = Math.max(0, clickMin - startMin)
+      }
+
+      lastXYRef.current = [cx, cy]
+
+      if (last) {
+        stopEdgeScroll()
+        lastXYRef.current = null
+        const finalPos = ghostPosRef.current
+        ghostPosRef.current = null
+        onGhostChange(null)
+        if (finalPos && onReschedule) {
+          if (ev.calendarType === 'personal') {
+            const time = formatTime(new Date(0, 0, 0, Math.floor(finalPos.topMin / 60), finalPos.topMin % 60))
+            if (!window.confirm(`Move "${ev.title}" to ${time}?\n\nThis is a personal event.`)) return
+          }
+          onReschedule(ev, weekDates[finalPos.dayIndex], finalPos.topMin)
+        }
+        return
+      }
+
+      computeGhost(cx, cy)
+      startEdgeScroll()
+    },
+    { filterTaps: true, pointer: { capture: true }, enabled: isDraggable }
+  )
+
+  return (
+    <button
+      {...bind()}
+      data-event-id={ev.id}
+      onClick={() => onEventClick(ev)}
+      className="absolute left-[2px] right-[2px] rounded-md px-2 py-1 text-[11px] font-medium overflow-hidden border-none text-left transition-all duration-100"
+      style={{
+        top,
+        height,
+        background: hexToRgba(ev.color, isGhosting ? 0.08 : 0.2),
+        color: ev.color,
+        borderLeft: `3px solid ${ev.color}`,
+        opacity: isGhosting ? 0.4 : 1,
+        zIndex: 2,
+        lineHeight: 1.3,
+        cursor: isDraggable ? 'grab' : 'pointer',
+        touchAction: isDraggable ? 'none' : 'auto',
+      }}
+      onMouseEnter={e => {
+        if (!isGhosting) {
+          e.currentTarget.style.filter = 'brightness(1.2)'
+          e.currentTarget.style.zIndex = '3'
+        }
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.filter = ''
+        e.currentTarget.style.zIndex = '2'
+      }}
+    >
+      <div>{ev.title}</div>
+    </button>
+  )
+}
+
+// ── WeekView ───────────────────────────────────────────────────────────────
+
+export function WeekView({ currentDate, events, onEventClick, onReschedule }: WeekViewProps) {
   const today = new Date()
   const weekDates = getWeekDates(currentDate)
   const bodyRef = useRef<HTMLDivElement>(null)
   const columnRefs = useRef<(HTMLDivElement | null)[]>([])
 
-  // Split events: all-day/multi-day vs timed
   const allDayEvents = events.filter(e => e.allDay || !sameDay(e.start, e.end))
   const timedEvents = events.filter(e => !e.allDay && sameDay(e.start, e.end))
 
-  // Group all-day events per day for the week
   const allDayByDay = weekDates.map(day =>
     allDayEvents.filter(e => eventSpansDay(e.start, e.end, day, e.allDay))
   )
   const maxAllDay = Math.max(0, ...allDayByDay.map(d => d.length))
 
   const [meals, setMeals] = useState<Record<string, string>>({})
+  const [reschedView, setReschedView] = useState<{ dayIndex: number; topMin: number; event: CalendarEvent } | null>(null)
 
-  // Fetch meals for visible week
   useEffect(() => {
     const start = toDateKey(weekDates[0])
     const end = toDateKey(weekDates[6])
@@ -51,216 +208,14 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
       .catch(() => {})
   }, [weekDates[0].toISOString()]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Drag-to-create state ──
-  const [dragDayIndex, setDragDayIndex] = useState<number | null>(null)
-  const [dragStart, setDragStart] = useState<number | null>(null)
-  const [dragEnd, setDragEnd] = useState<number | null>(null)
-  const dragging = useRef(false)
-
-  // ── Drag-to-reschedule state ──
-  // Using refs for values needed in global listeners (avoids stale closures)
-  const reschedRef = useRef<{
-    event: CalendarEvent
-    clickOffsetMin: number  // where within the event the user clicked
-    durationMin: number
-    startY: number
-    moved: boolean
-  } | null>(null)
-  const reschedPosRef = useRef<{ dayIndex: number; topMin: number } | null>(null)
-  const [reschedView, setReschedView] = useState<{ dayIndex: number; topMin: number; event: CalendarEvent } | null>(null)
-  const suppressClickRef = useRef<string | null>(null) // event id to suppress next onClick
-
-  // ── Edge-scroll during reschedule drag ──
-  const scrollAnimRef = useRef<number | null>(null)
-  const lastMouseRef = useRef<{ clientX: number; clientY: number } | null>(null)
-
-  function stopEdgeScroll() {
-    if (scrollAnimRef.current !== null) {
-      cancelAnimationFrame(scrollAnimRef.current)
-      scrollAnimRef.current = null
-    }
-  }
-
-  function startEdgeScroll(
-    recompute: (clientX: number, clientY: number) => void
-  ) {
-    if (scrollAnimRef.current !== null) return
-    const EDGE_ZONE = 60
-    const MAX_SPEED = 10
-
-    function tick() {
-      const mouse = lastMouseRef.current
-      const body = bodyRef.current
-      if (!mouse || !body) { scrollAnimRef.current = null; return }
-
-      const rect = body.getBoundingClientRect()
-      const distTop = mouse.clientY - rect.top
-      const distBot = rect.bottom - mouse.clientY
-      let delta = 0
-      if (distTop < EDGE_ZONE && distTop >= 0) delta = -MAX_SPEED * (1 - distTop / EDGE_ZONE)
-      else if (distBot < EDGE_ZONE && distBot >= 0) delta = MAX_SPEED * (1 - distBot / EDGE_ZONE)
-
-      if (delta !== 0) {
-        body.scrollTop += delta
-        recompute(mouse.clientX, mouse.clientY)
-      }
-      scrollAnimRef.current = requestAnimationFrame(tick)
-    }
-    scrollAnimRef.current = requestAnimationFrame(tick)
-  }
-
-  // Scroll to 7am on mount
   useEffect(() => {
-    if (bodyRef.current) {
-      bodyRef.current.scrollTop = 7 * HOUR_HEIGHT
-    }
+    if (bodyRef.current) bodyRef.current.scrollTop = 7 * HOUR_HEIGHT
   }, [])
 
-  const getMinutesFromY = useCallback((clientY: number, colEl: HTMLDivElement | null): number => {
-    if (!colEl) return 0
-    const rect = colEl.getBoundingClientRect()
-    const scrollTop = bodyRef.current?.scrollTop ?? 0
-    const y = clientY - rect.top + scrollTop
-    const minutes = (y / (24 * HOUR_HEIGHT)) * 24 * 60
-    return Math.max(0, Math.min(24 * 60, snapToQuarter(minutes)))
-  }, [])
-
-  // ── Drag-to-create handlers ──
-
-  const handleMouseDown = useCallback((e: React.MouseEvent, dayIndex: number) => {
-    if ((e.target as HTMLElement).closest('[data-event-id]')) return // let event handle it
-    if ((e.target as HTMLElement).closest('button')) return
-    dragging.current = true
-    const min = getMinutesFromY(e.clientY, columnRefs.current[dayIndex])
-    setDragDayIndex(dayIndex)
-    setDragStart(min)
-    setDragEnd(min + 30)
-  }, [getMinutesFromY])
-
-  const handleMouseMove = useCallback((e: React.MouseEvent, dayIndex: number) => {
-    if (!dragging.current || dragDayIndex !== dayIndex || dragStart === null) return
-    setDragEnd(getMinutesFromY(e.clientY, columnRefs.current[dayIndex]))
-  }, [dragDayIndex, dragStart, getMinutesFromY])
-
-  const handleMouseUp = useCallback((dayIndex: number) => {
-    if (!dragging.current || dragDayIndex !== dayIndex || dragStart === null || dragEnd === null) {
-      dragging.current = false
-      return
-    }
-    dragging.current = false
-    const start = Math.min(dragStart, dragEnd)
-    const end = Math.max(dragStart, dragEnd)
-    if (end - start >= 15 && onDragCreate) {
-      onDragCreate(weekDates[dayIndex], start, end)
-    }
-    setDragDayIndex(null)
-    setDragStart(null)
-    setDragEnd(null)
-  }, [dragDayIndex, dragStart, dragEnd, weekDates, onDragCreate])
-
-  const handleMouseLeave = useCallback(() => {
-    if (dragging.current) {
-      dragging.current = false
-      setDragDayIndex(null)
-      setDragStart(null)
-      setDragEnd(null)
-    }
-  }, [])
-
-  // ── Drag-to-reschedule: start on event mousedown ──
-
-  const handleEventMouseDown = useCallback((
-    e: React.MouseEvent,
-    ev: CalendarEvent,
-    dayIndex: number
-  ) => {
-    if (!onReschedule || (ev.provider !== 'google' && ev.provider !== 'outlook')) return
-    if (ev.calendarType === 'work') return
-
-    e.stopPropagation() // prevent column drag-to-create from starting
-
-    const col = columnRefs.current[dayIndex]
-    const clickMin = getMinutesFromY(e.clientY, col)
-    const eventStartMin = ev.start.getHours() * 60 + ev.start.getMinutes()
-    const eventEndMin = ev.end.getHours() * 60 + ev.end.getMinutes()
-
-    reschedRef.current = {
-      event: ev,
-      clickOffsetMin: Math.max(0, clickMin - eventStartMin),
-      durationMin: Math.max(15, eventEndMin - eventStartMin),
-      startY: e.clientY,
-      moved: false,
-    }
-    reschedPosRef.current = { dayIndex, topMin: eventStartMin }
-
-    function recompute(clientX: number, clientY: number) {
-      const rref = reschedRef.current
-      if (!rref) return
-
-      let targetDayIndex = reschedPosRef.current?.dayIndex ?? 0
-      let targetCol: HTMLDivElement | null = columnRefs.current[targetDayIndex]
-      for (let i = 0; i < columnRefs.current.length; i++) {
-        const c = columnRefs.current[i]
-        if (!c) continue
-        const rect = c.getBoundingClientRect()
-        if (clientX >= rect.left && clientX <= rect.right) {
-          targetDayIndex = i
-          targetCol = c
-          break
-        }
-      }
-
-      if (!targetCol) return
-      const rect = targetCol.getBoundingClientRect()
-      const scrollTop = bodyRef.current?.scrollTop ?? 0
-      const y = clientY - rect.top + scrollTop
-      const rawMin = (y / (24 * HOUR_HEIGHT)) * 24 * 60
-      const newTopMin = snapToQuarter(
-        Math.max(0, Math.min(24 * 60 - rref.durationMin, rawMin - rref.clickOffsetMin))
-      )
-
-      const newPos = { dayIndex: targetDayIndex, topMin: newTopMin }
-      reschedPosRef.current = newPos
-      setReschedView({ ...newPos, event: rref.event })
-    }
-
-    function onGlobalMove(me: MouseEvent) {
-      const rref = reschedRef.current
-      if (!rref) return
-
-      if (Math.abs(me.clientY - rref.startY) > 8) rref.moved = true
-      if (!rref.moved) return
-
-      lastMouseRef.current = { clientX: me.clientX, clientY: me.clientY }
-      recompute(me.clientX, me.clientY)
-      startEdgeScroll(recompute)
-    }
-
-    function onGlobalUp() {
-      document.removeEventListener('mousemove', onGlobalMove)
-      document.removeEventListener('mouseup', onGlobalUp)
-      stopEdgeScroll()
-      lastMouseRef.current = null
-
-      const rref = reschedRef.current
-      const pos = reschedPosRef.current
-      reschedRef.current = null
-      reschedPosRef.current = null
-      setReschedView(null)
-
-      if (rref?.moved && pos && onReschedule) {
-        suppressClickRef.current = rref.event.id
-        if (rref.event.calendarType === 'personal') {
-          const newTime = formatTime(new Date(0, 0, 0, Math.floor(pos.topMin / 60), pos.topMin % 60))
-          if (!window.confirm(`Move "${rref.event.title}" to ${newTime}?\n\nThis is a personal event.`)) return
-        }
-        onReschedule(rref.event, weekDates[pos.dayIndex], pos.topMin)
-      }
-    }
-
-    document.addEventListener('mousemove', onGlobalMove)
-    document.addEventListener('mouseup', onGlobalUp)
-  }, [getMinutesFromY, onReschedule, weekDates])
+  const handleGhostChange = useCallback(
+    (ghost: { dayIndex: number; topMin: number; event: CalendarEvent } | null) => setReschedView(ghost),
+    []
+  )
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden">
@@ -273,7 +228,7 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
           background: 'var(--surface)',
         }}
       >
-        <div /> {/* time gutter */}
+        <div />
         {weekDates.map((d, i) => {
           const isToday = sameDay(d, today)
           return (
@@ -334,7 +289,7 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
         </div>
       )}
 
-      {/* Dinner band row — always visible below all-day section */}
+      {/* Dinner band row */}
       <div
         className="flex-shrink-0 grid"
         style={{
@@ -406,25 +361,13 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
         {weekDates.map((day, di) => {
           const dayEvents = timedEvents.filter(e => sameDay(e.start, day))
           const nowMinutes = today.getHours() * 60 + today.getMinutes()
-          const isDragTarget = dragDayIndex === di && dragStart !== null && dragEnd !== null
-
-          const previewTop = isDragTarget
-            ? (Math.min(dragStart!, dragEnd!) / 60) * HOUR_HEIGHT
-            : 0
-          const previewHeight = isDragTarget
-            ? (Math.abs(dragEnd! - dragStart!) / 60) * HOUR_HEIGHT
-            : 0
 
           return (
             <div
               key={di}
               ref={el => { columnRefs.current[di] = el }}
               className="relative select-none"
-              style={{ borderLeft: '1px solid var(--border)', cursor: 'crosshair' }}
-              onMouseDown={e => handleMouseDown(e, di)}
-              onMouseMove={e => handleMouseMove(e, di)}
-              onMouseUp={() => handleMouseUp(di)}
-              onMouseLeave={handleMouseLeave}
+              style={{ borderLeft: '1px solid var(--border)' }}
             >
               {/* Hour lines */}
               {HOURS.map(h => (
@@ -434,20 +377,6 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
                 />
               ))}
 
-              {/* Drag-to-create preview */}
-              {isDragTarget && previewHeight > 0 && (
-                <div
-                  className="absolute left-[2px] right-[2px] rounded-md pointer-events-none"
-                  style={{
-                    top: previewTop,
-                    height: previewHeight,
-                    background: 'rgba(108,140,255,0.15)',
-                    border: '2px dashed var(--accent)',
-                    zIndex: 5,
-                  }}
-                />
-              )}
-
               {/* Events */}
               {dayEvents.map(ev => {
                 const startMin = ev.start.getHours() * 60 + ev.start.getMinutes()
@@ -455,52 +384,30 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
                 const top = (startMin / 60) * HOUR_HEIGHT
                 const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 20)
 
-                // While this event is being rescheduled, dim it and show ghost at new position
-                const isBeingRescheduled = reschedView?.event.id === ev.id
-
                 return (
-                  <button
+                  <DraggableEventBlock
                     key={ev.id}
-                    data-event-id={ev.id}
-                    onClick={() => {
-                      if (suppressClickRef.current === ev.id) {
-                        suppressClickRef.current = null
-                        return
-                      }
-                      onEventClick(ev)
-                    }}
-                    onMouseDown={e => handleEventMouseDown(e, ev, di)}
-                    className="absolute left-[2px] right-[2px] rounded-md px-2 py-1 text-[11px] font-medium overflow-hidden border-none text-left transition-all duration-100"
-                    style={{
-                      top,
-                      height,
-                      background: hexToRgba(ev.color, isBeingRescheduled ? 0.08 : 0.2),
-                      color: ev.color,
-                      borderLeft: `3px solid ${ev.color}`,
-                      opacity: isBeingRescheduled ? 0.4 : 1,
-                      zIndex: 2,
-                      lineHeight: 1.3,
-                      cursor: onReschedule && (ev.provider === 'google' || ev.provider === 'outlook') && ev.calendarType !== 'work' ? 'grab' : 'pointer',
-                    }}
-                    onMouseEnter={e => {
-                      if (!isBeingRescheduled) {
-                        e.currentTarget.style.filter = 'brightness(1.2)'
-                        e.currentTarget.style.zIndex = '3'
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.filter = ''
-                      e.currentTarget.style.zIndex = '2'
-                    }}
-                  >
-                    <div>{ev.title}</div>
-                  </button>
+                    ev={ev}
+                    top={top}
+                    height={height}
+                    dayIndex={di}
+                    columnRefs={columnRefs}
+                    bodyRef={bodyRef}
+                    weekDates={weekDates}
+                    onEventClick={onEventClick}
+                    onReschedule={onReschedule}
+                    onGhostChange={handleGhostChange}
+                    isGhosting={reschedView?.event.id === ev.id}
+                  />
                 )
               })}
 
               {/* Drag-to-reschedule ghost */}
               {reschedView && reschedView.dayIndex === di && (() => {
-                const ghostHeight = Math.max((reschedView.event.end.getTime() - reschedView.event.start.getTime()) / 60000 / 60 * HOUR_HEIGHT, 20)
+                const ghostHeight = Math.max(
+                  (reschedView.event.end.getTime() - reschedView.event.start.getTime()) / 60000 / 60 * HOUR_HEIGHT,
+                  20
+                )
                 return (
                   <div
                     className="absolute left-[2px] right-[2px] rounded-md px-2 py-1 text-[11px] font-medium overflow-hidden pointer-events-none"
@@ -509,7 +416,6 @@ export function WeekView({ currentDate, events, onEventClick, onDragCreate, onRe
                       height: ghostHeight,
                       background: hexToRgba(reschedView.event.color, 0.35),
                       color: reschedView.event.color,
-                      borderLeft: `3px solid ${reschedView.event.color}`,
                       border: `2px dashed ${reschedView.event.color}`,
                       zIndex: 10,
                       lineHeight: 1.3,
