@@ -14,51 +14,137 @@ export const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 })
 
-// ── Keys ───────────────────────────────────────────────────────────────────
+// ── Key conventions ────────────────────────────────────────────────────────
+//
+// All Phase 3 collection types follow this pattern:
+//   {entity}:{id}   → individual object          e.g. member:abc123
+//   {entities}:ids  → string[] of all IDs        e.g. members:ids
+//
+// Use createEntityHelpers<T>() below to get typed CRUD for any entity.
+// Accounts already use this pattern (account:{id}, accounts:byMember:{mid}).
+// Family members were migrated to it in the pre-Phase-3 commit.
 
 const KEYS = {
-  familyMembers: 'family:members',
-  account: (id: string) => `account:${id}`,
+  // Family members (individual-key pattern)
+  member:    (id: string) => `member:${id}`,
+  memberIds: 'members:ids',
+  // Legacy flat-array key — read once during migration, then deleted
+  legacyFamilyMembers: 'family:members',
+
+  // Connected accounts
+  account:          (id: string)       => `account:${id}`,
   accountsByMember: (memberId: string) => `accounts:byMember:${memberId}`,
-  settings: 'settings',
-  note: (date: string) => `note:${date}`,
+
+  // Singletons
+  settings:   'settings',
+
+  // Per-date / per-member keys
+  note:        (date: string)     => `note:${date}`,
   localEvents: (memberId: string) => `local-events:${memberId}`,
 } as const
 
-// ── Family Members ─────────────────────────────────────────────────────────
+// ── Entity helper factory ──────────────────────────────────────────────────
+//
+// Creates a standard CRUD interface for any entity that follows the
+// {entity}:{id} + {entities}:ids pattern. All Phase 3 features use this.
+//
+// Usage:
+//   const choreHelpers = createEntityHelpers<Chore>('chore', 'chores:ids')
+//   await choreHelpers.create(newChore)
+//   await choreHelpers.getAll()
 
-export async function getFamilyMembers(): Promise<FamilyMember[]> {
-  const members = await redis.get<FamilyMember[]>(KEYS.familyMembers)
-  return members ?? []
+export function createEntityHelpers<T extends { id: string }>(
+  entityKeyPrefix: string,
+  idsKey: string
+) {
+  const entityKey = (id: string) => `${entityKeyPrefix}:${id}`
+
+  return {
+    async getIds(): Promise<string[]> {
+      return (await redis.get<string[]>(idsKey)) ?? []
+    },
+
+    async getAll(): Promise<T[]> {
+      const ids = await this.getIds()
+      if (ids.length === 0) return []
+      const items = await Promise.all(ids.map((id) => redis.get<T>(entityKey(id))))
+      return items.filter((item) => item !== null) as T[]
+    },
+
+    async getById(id: string): Promise<T | null> {
+      return redis.get<T>(entityKey(id))
+    },
+
+    async create(item: T): Promise<void> {
+      await redis.set(entityKey(item.id), item)
+      const ids = await this.getIds()
+      if (!ids.includes(item.id)) {
+        await redis.set(idsKey, [...ids, item.id])
+      }
+    },
+
+    async update(id: string, updates: Partial<Omit<T, 'id'>>): Promise<T | null> {
+      const item = await this.getById(id)
+      if (!item) return null
+      const updated = { ...item, ...updates }
+      await redis.set(entityKey(id), updated)
+      return updated
+    },
+
+    async remove(id: string): Promise<boolean> {
+      const item = await this.getById(id)
+      if (!item) return false
+      await redis.del(entityKey(id))
+      const ids = await this.getIds()
+      await redis.set(idsKey, ids.filter((i) => i !== id))
+      return true
+    },
+  }
 }
 
-export async function setFamilyMembers(members: FamilyMember[]): Promise<void> {
-  await redis.set(KEYS.familyMembers, members)
+// ── Family Members ─────────────────────────────────────────────────────────
+
+const memberHelpers = createEntityHelpers<FamilyMember>('member', KEYS.memberIds)
+
+// One-time migration: if the old flat-array key exists and the new ID list
+// does not, read the old data, write individual keys, then delete the old key.
+async function migrateFamilyMembersIfNeeded(): Promise<void> {
+  const ids = await redis.get<string[]>(KEYS.memberIds)
+  if (ids !== null) return // already migrated
+
+  const legacy = await redis.get<FamilyMember[]>(KEYS.legacyFamilyMembers)
+  if (!legacy || legacy.length === 0) {
+    // No old data — just initialise an empty list
+    await redis.set(KEYS.memberIds, [])
+    return
+  }
+
+  // Write each member to its individual key
+  await Promise.all(legacy.map((m) => redis.set(KEYS.member(m.id), m)))
+  await redis.set(KEYS.memberIds, legacy.map((m) => m.id))
+  await redis.del(KEYS.legacyFamilyMembers)
+}
+
+export async function getFamilyMembers(): Promise<FamilyMember[]> {
+  await migrateFamilyMembersIfNeeded()
+  return memberHelpers.getAll()
 }
 
 export async function addFamilyMember(member: FamilyMember): Promise<void> {
-  const members = await getFamilyMembers()
-  members.push(member)
-  await setFamilyMembers(members)
+  await migrateFamilyMembersIfNeeded()
+  await memberHelpers.create(member)
 }
 
 export async function updateFamilyMember(
   id: string,
   updates: Partial<Omit<FamilyMember, 'id'>>
 ): Promise<FamilyMember | null> {
-  const members = await getFamilyMembers()
-  const idx = members.findIndex((m) => m.id === id)
-  if (idx === -1) return null
-  members[idx] = { ...members[idx], ...updates }
-  await setFamilyMembers(members)
-  return members[idx]
+  return memberHelpers.update(id, updates)
 }
 
 export async function removeFamilyMember(id: string): Promise<boolean> {
-  const members = await getFamilyMembers()
-  const filtered = members.filter((m) => m.id !== id)
-  if (filtered.length === members.length) return false
-  await setFamilyMembers(filtered)
+  const removed = await memberHelpers.remove(id)
+  if (!removed) return false
 
   // Also remove all accounts for this member
   const accountIds = await getAccountIdsForMember(id)
@@ -94,14 +180,11 @@ export async function getAllAccounts(): Promise<ConnectedAccount[]> {
 }
 
 export async function saveAccount(account: ConnectedAccount): Promise<void> {
-  // Save the account object
   await redis.set(KEYS.account(account.id), account)
 
-  // Add to the member's account list if not already there
   const ids = await getAccountIdsForMember(account.familyMemberId)
   if (!ids.includes(account.id)) {
-    ids.push(account.id)
-    await redis.set(KEYS.accountsByMember(account.familyMemberId), ids)
+    await redis.set(KEYS.accountsByMember(account.familyMemberId), [...ids, account.id])
   }
 }
 
@@ -120,12 +203,8 @@ export async function removeAccount(id: string): Promise<boolean> {
   const account = await getAccount(id)
   if (!account) return false
 
-  // Remove from member's account list
   const ids = await getAccountIdsForMember(account.familyMemberId)
-  const filtered = ids.filter((accId) => accId !== id)
-  await redis.set(KEYS.accountsByMember(account.familyMemberId), filtered)
-
-  // Delete the account object
+  await redis.set(KEYS.accountsByMember(account.familyMemberId), ids.filter((accId) => accId !== id))
   await redis.del(KEYS.account(id))
   return true
 }
@@ -178,8 +257,7 @@ export async function getLocalEvents(memberId: string): Promise<LocalEvent[]> {
 
 export async function saveLocalEvent(event: LocalEvent): Promise<void> {
   const events = await getLocalEvents(event.memberId)
-  events.push(event)
-  await redis.set(KEYS.localEvents(event.memberId), events)
+  await redis.set(KEYS.localEvents(event.memberId), [...events, event])
 }
 
 export async function updateLocalEvent(
@@ -188,7 +266,7 @@ export async function updateLocalEvent(
   updates: Partial<Omit<LocalEvent, 'id' | 'memberId'>>
 ): Promise<LocalEvent | null> {
   const events = await getLocalEvents(memberId)
-  const idx = events.findIndex(e => e.id === id)
+  const idx = events.findIndex((e) => e.id === id)
   if (idx === -1) return null
   events[idx] = { ...events[idx], ...updates }
   await redis.set(KEYS.localEvents(memberId), events)
@@ -197,7 +275,7 @@ export async function updateLocalEvent(
 
 export async function deleteLocalEvent(memberId: string, id: string): Promise<boolean> {
   const events = await getLocalEvents(memberId)
-  const filtered = events.filter(e => e.id !== id)
+  const filtered = events.filter((e) => e.id !== id)
   if (filtered.length === events.length) return false
   await redis.set(KEYS.localEvents(memberId), filtered)
   return true
@@ -205,8 +283,8 @@ export async function deleteLocalEvent(memberId: string, id: string): Promise<bo
 
 export async function getAllLocalEvents(): Promise<LocalEvent[]> {
   const members = await getFamilyMembers()
-  const localMembers = members.filter(m => m.localOnly)
+  const localMembers = members.filter((m) => m.localOnly)
   if (localMembers.length === 0) return []
-  const results = await Promise.all(localMembers.map(m => getLocalEvents(m.id)))
+  const results = await Promise.all(localMembers.map((m) => getLocalEvents(m.id)))
   return results.flat()
 }
