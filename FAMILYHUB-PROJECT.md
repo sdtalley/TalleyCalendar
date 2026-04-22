@@ -200,7 +200,8 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 - [x] Feature 3: Profile avatars (emoji / initials / photo) + non-person profiles (Pets, Activities, Holidays) — commit 7e64b1e
 
 **Phase 3B — Core Family Features**
-- [x] Feature 4: Chores (emoji, repeat, star value, completion with confetti animation) — uncommitted
+- [x] Feature 4: Chores (emoji, repeat, star value, completion with confetti animation) — 93060ce
+- [x] Feature 5: Routines (Morning/Afternoon/Evening blocks; daily auto-reset) — 2b1dd53
 - [ ] Feature 5: Routines (Morning / Afternoon / Evening blocks; daily auto-reset)
 - [ ] Feature 6: Lists (To Do / Grocery / Other; subcategories; recipe ingredient import)
 - [ ] Feature 7: Rewards / Stars (star balance per profile; reward redemption; celebration animation)

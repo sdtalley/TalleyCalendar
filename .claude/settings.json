@@ -7,7 +7,18 @@
       "WebFetch(domain:www.ourskylight.com)",
       "Bash(git commit -m ' *)",
       "Bash(npm audit *)",
-      "Read(//c/Users/steven.talley/.claude/projects/c--Users-steven-talley-OneDrive-SoftDev-TalleyCalendar/memory/**)"
+      "Read(//c/Users/steven.talley/.claude/projects/c--Users-steven-talley-OneDrive-SoftDev-TalleyCalendar/memory/**)",
+      "Bash(git -C \"c:/Users/steven.talley/OneDrive/SoftDev/TalleyCalendar\" log --oneline -10)",
+      "Bash(git -C \"c:/Users/steven.talley/OneDrive/SoftDev/TalleyCalendar\" status)",
+      "Bash(git -C \"c:/Users/steven.talley/OneDrive/SoftDev/TalleyCalendar\" diff --stat HEAD)",
+      "Bash(git -C \"c:/Users/steven.talley/OneDrive/SoftDev/TalleyCalendar\" add FAMILYHUB-PROJECT.md src/lib/calendar/types.ts src/lib/redis.ts src/app/api/chores/ src/components/tasks/ src/components/tabs/TasksTab.tsx)",
+      "Bash(git -C c:/Users/steven.talley/OneDrive/SoftDev/TalleyCalendar commit -m ' *)",
+      "Read(//c/Users/steven.talley/.claude/projects/**)",
+      "Bash(awk '{print $2}')",
+      "Bash(python3 -c ' *)",
+      "Bash(node -e ' *)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(git -C \"c:/Users/steven.talley/OneDrive/SoftDev/TalleyCalendar\" add src/lib/calendar/types.ts src/lib/redis.ts src/app/api/routines/ src/components/tasks/RoutineCard.tsx src/components/tasks/RoutineForm.tsx src/components/tabs/TasksTab.tsx FAMILYHUB-PROJECT.md)"
     ],
     "additionalDirectories": [
       "c:\\Users\\steven.talley\\OneDrive\\SoftDev\\TalleyCalendar\\src\\app\\api",
