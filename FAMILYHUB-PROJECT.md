@@ -1,6 +1,6 @@
 # FamilyHub Calendar — Master Project Specification
 
-**Current state (2026-04-21):** Pre-Phase 3 architecture complete (5 commits). Phase 3A starting next.  
+**Current state (2026-04-22):** Phase 3A complete (3 features, 3 commits). Phase 3B next: Chores → Routines → Lists → Rewards.  
 **Detailed Phase 3 implementation specs:** see Claude Code memory → `phase3_implementation_plan.md`
 
 ---
@@ -194,13 +194,13 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 ### Phase 3 — Skylight Feature Parity (starting Phase 3A)
 > Granular specs (data models, API routes, component designs): `phase3_implementation_plan.md` in Claude Code memory
 
-**Phase 3A — Foundation**
-- [ ] Feature 1: Multi-user auth + role system (admin / member / guest; bcrypt; per-user logins)
-- [ ] Feature 2: Navigation polish (Settings as inline tab; Day → rolling agenda view; configurable week day count)
-- [ ] Feature 3: Profile avatars (emoji / initials / photo) + non-person profiles (Pets, Activities, Holidays)
+**Phase 3A — Foundation** ✅ COMPLETE
+- [x] Feature 1: Multi-user auth + role system (admin / member / guest; bcrypt; per-user logins) — commit c085c19
+- [x] Feature 2: Navigation polish (Agenda view + profile chips strip) — commit d60ef10
+- [x] Feature 3: Profile avatars (emoji / initials / photo) + non-person profiles (Pets, Activities, Holidays) — commit 7e64b1e
 
 **Phase 3B — Core Family Features**
-- [ ] Feature 4: Chores (emoji, repeat, star value, completion with confetti animation)
+- [x] Feature 4: Chores (emoji, repeat, star value, completion with confetti animation) — uncommitted
 - [ ] Feature 5: Routines (Morning / Afternoon / Evening blocks; daily auto-reset)
 - [ ] Feature 6: Lists (To Do / Grocery / Other; subcategories; recipe ingredient import)
 - [ ] Feature 7: Rewards / Stars (star balance per profile; reward redemption; celebration animation)

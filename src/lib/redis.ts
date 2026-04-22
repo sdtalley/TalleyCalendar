@@ -6,6 +6,8 @@ import type {
   CalendarView,
   LocalEvent,
   AppUser,
+  Chore,
+  ChoreCompletion,
 } from './calendar/types'
 
 // ── Redis client ───────────────────────────────────────────────────────────
@@ -47,6 +49,13 @@ const KEYS = {
   // Per-date / per-member keys
   note:        (date: string)     => `note:${date}`,
   localEvents: (memberId: string) => `local-events:${memberId}`,
+
+  // Chores (Phase 3B)
+  choreIds:        'chores:ids',
+  choreCompletion: (date: string, choreId: string) => `chore-completion:${date}:${choreId}`,
+
+  // Star balances (Phase 3B)
+  starBalance: (memberId: string) => `star-balance:${memberId}`,
 } as const
 
 // ── Entity helper factory ──────────────────────────────────────────────────
@@ -339,4 +348,48 @@ export async function deleteUser(id: string): Promise<boolean> {
   if (!removed) return false
   await redis.del(KEYS.userByEmail(user.email))
   return true
+}
+
+// ── Chores (Phase 3B) ─────────────────────────────────────────────────────
+
+const choreHelpers = createEntityHelpers<Chore>('chore', KEYS.choreIds)
+
+export const getChores    = ()                                        => choreHelpers.getAll()
+export const getChore     = (id: string)                              => choreHelpers.getById(id)
+export const createChore  = (chore: Chore)                            => choreHelpers.create(chore)
+export const updateChore  = (id: string, u: Partial<Omit<Chore,'id'>>) => choreHelpers.update(id, u)
+export const deleteChore  = (id: string)                              => choreHelpers.remove(id)
+
+export async function getChoreCompletion(date: string, choreId: string): Promise<ChoreCompletion | null> {
+  return redis.get<ChoreCompletion>(KEYS.choreCompletion(date, choreId))
+}
+
+export async function setChoreCompletion(date: string, choreId: string, completion: ChoreCompletion): Promise<void> {
+  await redis.set(KEYS.choreCompletion(date, choreId), completion)
+}
+
+export async function removeChoreCompletion(date: string, choreId: string): Promise<boolean> {
+  const existing = await getChoreCompletion(date, choreId)
+  if (!existing) return false
+  await redis.del(KEYS.choreCompletion(date, choreId))
+  return true
+}
+
+export async function getChoreCompletions(date: string, choreIds: string[]): Promise<Record<string, ChoreCompletion | null>> {
+  if (choreIds.length === 0) return {}
+  const results = await Promise.all(choreIds.map(id => getChoreCompletion(date, id)))
+  return Object.fromEntries(choreIds.map((id, i) => [id, results[i]]))
+}
+
+// ── Star Balances (Phase 3B) ──────────────────────────────────────────────
+
+export async function getStarBalance(memberId: string): Promise<number> {
+  return (await redis.get<number>(KEYS.starBalance(memberId))) ?? 0
+}
+
+export async function adjustStarBalance(memberId: string, delta: number): Promise<number> {
+  const current = await getStarBalance(memberId)
+  const newBalance = Math.max(0, current + delta)
+  await redis.set(KEYS.starBalance(memberId), newBalance)
+  return newBalance
 }

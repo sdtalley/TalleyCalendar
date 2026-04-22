@@ -134,6 +134,34 @@ export interface SessionPayload {
   exp: number
 }
 
+// ── Chores (Phase 3B) ────────────────────────────────────────────────────
+
+export interface ChoreRepeat {
+  frequency: 'daily' | 'weekly' | 'monthly'
+  interval: number          // every N units; min 1
+  daysOfWeek?: number[]     // 0=Sun..6=Sat; only for frequency='weekly'
+  endDate?: string          // YYYY-MM-DD; undefined = no end
+}
+
+export interface Chore {
+  id: string
+  title: string
+  emoji?: string            // single emoji character
+  memberIds: string[]       // assigned family member IDs
+  date?: string             // YYYY-MM-DD; undefined = no specific date (always active)
+  time?: string             // HH:MM; undefined = no specific time
+  repeat?: ChoreRepeat
+  starValue: number         // 0 = no stars
+  createdAt: string         // ISO
+  updatedAt: string         // ISO
+}
+
+export interface ChoreCompletion {
+  status: 'complete' | 'skipped'
+  completedAt: string       // ISO
+  completedByMemberId?: string
+}
+
 // ── UI types ───────────────────────────────────────────────────────────────
 
 // Extended FamilyMember with client-side UI state (not stored in Redis)
