@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { MonthView } from '@/components/calendar/MonthView'
 import { WeekView } from '@/components/calendar/WeekView'
-import { DayView } from '@/components/calendar/DayView'
+import { AgendaView } from '@/components/calendar/AgendaView'
 import { EventModal } from '@/components/calendar/EventModal'
 import { EventDetailModal } from '@/components/calendar/EventDetailModal'
 import { MobileDayDrawer } from '@/components/calendar/MobileDayDrawer'
@@ -12,7 +12,27 @@ import { useEventFilters } from '@/hooks/useEventFilters'
 import { useCalendarEvents } from '@/hooks/useCalendarEvents'
 import { generateSampleEvents, DEFAULT_FAMILY_MEMBERS } from '@/lib/sampleData'
 import { formatMonthYear } from '@/lib/utils'
-import type { CalendarEvent, FamilyMemberUI, NewEventDraft, CalendarView } from '@/lib/calendar/types'
+import type { CalendarEvent, FamilyMember, FamilyMemberUI, NewEventDraft, CalendarView } from '@/lib/calendar/types'
+
+function getMemberInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  if (parts.length === 1) return (parts[0][0] ?? '?').toUpperCase()
+  return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase()
+}
+
+function getMemberAvatarContent(member: FamilyMember): string {
+  if (member.avatar?.type === 'emoji') return member.avatar.value
+  if (member.avatar?.type === 'initials' && member.avatar.value) return member.avatar.value
+  return getMemberInitials(member.name)
+}
+
+function formatAgendaRange(startDate: Date): string {
+  const end = new Date(startDate)
+  end.setDate(end.getDate() + 13)
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return `${fmt(startDate)} – ${fmt(end)}`
+}
 
 const VIEWS: { id: CalendarView; label: string }[] = [
   { id: 'month', label: 'Month' },
@@ -294,7 +314,7 @@ export function CalendarTab() {
               className="text-[17px] font-semibold text-center select-none"
               style={{ minWidth: 170, color: 'var(--text)' }}
             >
-              {formatMonthYear(currentDate)}
+              {view === 'day' ? formatAgendaRange(currentDate) : formatMonthYear(currentDate)}
             </span>
             <NavButton onClick={goNext} label="›" />
           </div>
@@ -344,7 +364,7 @@ export function CalendarTab() {
               className="text-[14px] font-semibold text-center select-none"
               style={{ minWidth: 120, color: 'var(--text)' }}
             >
-              {formatMonthYear(currentDate)}
+              {view === 'day' ? formatAgendaRange(currentDate) : formatMonthYear(currentDate)}
             </span>
             <NavButton onClick={goNext} label="›" />
           </div>
@@ -369,6 +389,55 @@ export function CalendarTab() {
           </div>
         </div>
       </div>
+
+      {/* Profile chips strip — desktop only, real members only */}
+      {hasRealSetup && familyMembers.length > 0 && (
+        <div
+          className="hidden md:flex flex-shrink-0 items-center gap-2 px-4 py-1.5 overflow-x-auto"
+          style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
+        >
+          {familyMembers.map(m => {
+            const avatarContent = getMemberAvatarContent(m)
+            const isEmoji = m.avatar?.type === 'emoji'
+            return (
+              <button
+                key={m.id}
+                onClick={() => toggleMember(m.id)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full whitespace-nowrap border-none cursor-pointer transition-all duration-150 flex-shrink-0"
+                style={{
+                  background: m.enabled ? `${m.color}22` : 'var(--surface2)',
+                  border: `1px solid ${m.enabled ? m.color + '55' : 'var(--border)'}`,
+                  opacity: m.enabled ? 1 : 0.5,
+                }}
+              >
+                <span
+                  style={{
+                    width: 22, height: 22,
+                    borderRadius: '50%',
+                    background: m.color,
+                    color: '#fff',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: isEmoji ? 12 : 9,
+                    fontWeight: 700,
+                    flexShrink: 0,
+                    lineHeight: 1,
+                  }}
+                >
+                  {avatarContent}
+                </span>
+                <span
+                  className="text-[12px] font-medium"
+                  style={{ color: m.enabled ? 'var(--text)' : 'var(--text-dim)' }}
+                >
+                  {m.name}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Error banners */}
       {calError && (
@@ -416,7 +485,7 @@ export function CalendarTab() {
             />
           )}
           {view === 'day' && (
-            <DayView
+            <AgendaView
               currentDate={currentDate}
               events={displayEvents}
               onEventClick={ev => setDetailEvent(ev)}

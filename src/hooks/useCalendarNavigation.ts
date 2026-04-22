@@ -22,7 +22,7 @@ export function useCalendarNavigation() {
       } else if (view === 'week') {
         d.setDate(d.getDate() - 7)
       } else {
-        d.setDate(d.getDate() - 1)
+        d.setDate(d.getDate() - 7)
       }
       return d
     })
@@ -36,7 +36,7 @@ export function useCalendarNavigation() {
       } else if (view === 'week') {
         d.setDate(d.getDate() + 7)
       } else {
-        d.setDate(d.getDate() + 1)
+        d.setDate(d.getDate() + 7)
       }
       return d
     })
