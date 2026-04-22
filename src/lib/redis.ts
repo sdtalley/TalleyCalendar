@@ -5,6 +5,7 @@ import type {
   AppSettings,
   CalendarView,
   LocalEvent,
+  AppUser,
 } from './calendar/types'
 
 // ── Redis client ───────────────────────────────────────────────────────────
@@ -25,6 +26,11 @@ export const redis = new Redis({
 // Family members were migrated to it in the pre-Phase-3 commit.
 
 const KEYS = {
+  // User accounts (Phase 3A)
+  user:        (id: string)    => `user:${id}`,
+  userIds:     'users:list',
+  userByEmail: (email: string) => `user:byEmail:${email}`,
+
   // Family members (individual-key pattern)
   member:    (id: string) => `member:${id}`,
   memberIds: 'members:ids',
@@ -287,4 +293,50 @@ export async function getAllLocalEvents(): Promise<LocalEvent[]> {
   if (localMembers.length === 0) return []
   const results = await Promise.all(localMembers.map((m) => getLocalEvents(m.id)))
   return results.flat()
+}
+
+// ── User Accounts (Phase 3A) ──────────────────────────────────────────────
+
+const userHelpers = createEntityHelpers<AppUser>('user', KEYS.userIds)
+
+export async function getUser(id: string): Promise<AppUser | null> {
+  return userHelpers.getById(id)
+}
+
+export async function getUserByEmail(email: string): Promise<AppUser | null> {
+  const userId = await redis.get<string>(KEYS.userByEmail(email))
+  if (!userId) return null
+  return getUser(userId)
+}
+
+export async function getAllUsers(): Promise<AppUser[]> {
+  return userHelpers.getAll()
+}
+
+export async function createUser(user: AppUser): Promise<void> {
+  await userHelpers.create(user)
+  await redis.set(KEYS.userByEmail(user.email), user.id)
+}
+
+export async function updateUser(
+  id: string,
+  updates: Partial<Omit<AppUser, 'id'>>
+): Promise<AppUser | null> {
+  const old = await getUser(id)
+  if (!old) return null
+  const updated = await userHelpers.update(id, updates)
+  if (updates.email && updates.email !== old.email) {
+    await redis.del(KEYS.userByEmail(old.email))
+    await redis.set(KEYS.userByEmail(updates.email), id)
+  }
+  return updated
+}
+
+export async function deleteUser(id: string): Promise<boolean> {
+  const user = await getUser(id)
+  if (!user) return false
+  const removed = await userHelpers.remove(id)
+  if (!removed) return false
+  await redis.del(KEYS.userByEmail(user.email))
+  return true
 }

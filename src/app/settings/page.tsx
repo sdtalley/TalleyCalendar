@@ -3,12 +3,13 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import type { FamilyMember, ConnectedAccount, AppSettings } from '@/lib/calendar/types'
+import type { FamilyMember, ConnectedAccount, AppSettings, AppUser, SessionPayload } from '@/lib/calendar/types'
 import { FamilyMemberList } from '@/components/settings/FamilyMemberList'
 import { AccountList } from '@/components/settings/AccountList'
 import { AddAccountFlow } from '@/components/settings/AddAccountFlow'
 
 type AccountSafe = Omit<ConnectedAccount, 'auth'> & { authType: string }
+type UserSafe = Omit<AppUser, 'passwordHash'>
 
 export default function SettingsPage() {
   const [members, setMembers] = useState<FamilyMember[]>([])
@@ -27,6 +28,15 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [addAccountMemberId, setAddAccountMemberId] = useState<string | null>(null)
+  const [session, setSession] = useState<SessionPayload | null>(null)
+  const [users, setUsers] = useState<UserSafe[]>([])
+  const [userFormOpen, setUserFormOpen] = useState(false)
+  const [newUserName, setNewUserName] = useState('')
+  const [newUserEmail, setNewUserEmail] = useState('')
+  const [newUserPassword, setNewUserPassword] = useState('')
+  const [newUserRole, setNewUserRole] = useState<AppUser['role']>('member')
+  const [newUserMemberId, setNewUserMemberId] = useState<string>('')
+  const [userFormError, setUserFormError] = useState('')
   const router = useRouter()
 
   // Check if PIN is required
@@ -56,11 +66,15 @@ export default function SettingsPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [membersRes, accountsRes, settingsRes] = await Promise.all([
+      const [membersRes, accountsRes, settingsRes, usersRes, meRes] = await Promise.all([
         fetch('/api/family'),
         fetch('/api/accounts'),
         fetch('/api/settings'),
+        fetch('/api/users'),
+        fetch('/api/auth/me'),
       ])
+      if (meRes.ok) setSession(await meRes.json())
+      if (usersRes.ok) setUsers(await usersRes.json())
       if (!membersRes.ok || !accountsRes.ok) {
         setError('Failed to load settings. Check that Redis is configured.')
         return
@@ -169,6 +183,39 @@ export default function SettingsPage() {
       setPinError(true)
       setPinInput('')
     }
+  }
+
+  async function handleCreateUser() {
+    setUserFormError('')
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: newUserName,
+        email: newUserEmail,
+        password: newUserPassword,
+        role: newUserRole,
+        memberId: newUserMemberId || null,
+      }),
+    })
+    if (res.ok) {
+      setUserFormOpen(false)
+      setNewUserName('')
+      setNewUserEmail('')
+      setNewUserPassword('')
+      setNewUserRole('member')
+      setNewUserMemberId('')
+      await fetchData()
+    } else {
+      const data = await res.json()
+      setUserFormError(data.error ?? 'Failed to create user')
+    }
+  }
+
+  async function handleDeleteUser(id: string) {
+    if (!confirm('Delete this user account? They will no longer be able to log in.')) return
+    const res = await fetch(`/api/users/${id}`, { method: 'DELETE' })
+    if (res.ok) await fetchData()
   }
 
   if (loading) {
@@ -463,6 +510,135 @@ export default function SettingsPage() {
           )}
 
         </section>
+
+        {/* Users & Access Section — admin only */}
+        {session?.role === 'admin' && (
+          <section
+            className="rounded-2xl p-6"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-lg font-bold" style={{ color: 'var(--text)' }}>
+                Users &amp; Access
+              </h2>
+              <button
+                onClick={() => { setUserFormOpen(v => !v); setUserFormError('') }}
+                className="settings-btn-primary text-sm"
+              >
+                {userFormOpen ? 'Cancel' : '+ Add User'}
+              </button>
+            </div>
+            <p className="text-sm mb-4" style={{ color: 'var(--text-dim)' }}>
+              Manage who can log in to FamilyHub and their permission level.
+            </p>
+
+            {/* Add user form */}
+            {userFormOpen && (
+              <div
+                className="rounded-xl p-4 mb-4 flex flex-col gap-3"
+                style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}
+              >
+                <div className="flex gap-3">
+                  <div className="flex flex-col gap-1.5 flex-1">
+                    <label className="field-label">Name</label>
+                    <input type="text" value={newUserName} onChange={e => setNewUserName(e.target.value)} placeholder="Full name" />
+                  </div>
+                  <div className="flex flex-col gap-1.5 flex-1">
+                    <label className="field-label">Email</label>
+                    <input type="email" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} placeholder="login@email.com" />
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex flex-col gap-1.5 flex-1">
+                    <label className="field-label">Password</label>
+                    <input type="password" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} placeholder="Min 8 characters" />
+                  </div>
+                  <div className="flex flex-col gap-1.5" style={{ minWidth: 100 }}>
+                    <label className="field-label">Role</label>
+                    <select value={newUserRole} onChange={e => setNewUserRole(e.target.value as AppUser['role'])}>
+                      <option value="admin">Admin</option>
+                      <option value="member">Member</option>
+                      <option value="guest">Guest</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="field-label">Linked Family Member (optional)</label>
+                  <select value={newUserMemberId} onChange={e => setNewUserMemberId(e.target.value)}>
+                    <option value="">— None —</option>
+                    {members.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+                {userFormError && (
+                  <div className="text-sm" style={{ color: '#ff6b6b' }}>{userFormError}</div>
+                )}
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleCreateUser}
+                    disabled={!newUserName || !newUserEmail || !newUserPassword}
+                    className="settings-btn-primary"
+                  >
+                    Create User
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* User list */}
+            <div className="flex flex-col gap-2">
+              {users.length === 0 && (
+                <div className="text-sm" style={{ color: 'var(--text-faint)' }}>No users yet.</div>
+              )}
+              {users.map(u => {
+                const linkedMember = members.find(m => m.id === u.memberId)
+                const isSelf = session?.userId === u.id
+                return (
+                  <div
+                    key={u.id}
+                    className="flex items-center justify-between px-4 py-3 rounded-xl"
+                    style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}
+                  >
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <div className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+                        {u.name}
+                        {isSelf && <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ background: 'var(--accent)', color: '#fff' }}>you</span>}
+                      </div>
+                      <div className="text-xs truncate" style={{ color: 'var(--text-dim)' }}>{u.email}</div>
+                      {linkedMember && (
+                        <div className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                          Linked: {linkedMember.name}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span
+                        className="text-xs px-2 py-1 rounded-full font-medium"
+                        style={{
+                          background: u.role === 'admin' ? 'rgba(108,140,255,0.15)' : 'var(--surface)',
+                          color: u.role === 'admin' ? 'var(--accent)' : 'var(--text-dim)',
+                          border: '1px solid var(--border)',
+                        }}
+                      >
+                        {u.role}
+                      </span>
+                      {!isSelf && (
+                        <button
+                          onClick={() => handleDeleteUser(u.id)}
+                          className="text-xs px-2 py-1 rounded cursor-pointer"
+                          style={{ background: 'rgba(255,107,107,0.1)', color: '#ff6b6b', border: 'none' }}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Settings PIN Section */}
         <section

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -19,7 +19,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       })
 
       if (res.ok) {
@@ -79,13 +79,13 @@ export default function LoginPage() {
 
         {/* Fields */}
         <div className="flex flex-col gap-1.5">
-          <label className="field-label">Username</label>
+          <label className="field-label">Email</label>
           <input
-            type="text"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
             autoFocus
-            autoComplete="username"
+            autoComplete="email"
           />
         </div>
 
@@ -102,12 +102,12 @@ export default function LoginPage() {
         {/* Submit */}
         <button
           type="submit"
-          disabled={loading || !username || !password}
+          disabled={loading || !email || !password}
           className="w-full py-3 rounded-xl text-[15px] font-semibold text-white border-none cursor-pointer transition-all duration-150"
           style={{
             background: 'var(--accent)',
             boxShadow: '0 4px 16px rgba(108,140,255,0.3)',
-            opacity: loading || !username || !password ? 0.5 : 1,
+            opacity: loading || !email || !password ? 0.5 : 1,
           }}
         >
           {loading ? 'Signing in...' : 'Sign In'}

@@ -1,24 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { SessionPayload } from '@/lib/calendar/types'
 
 const COOKIE_NAME = 'familyhub_session'
 
-// Routes that don't require authentication
 const PUBLIC_PATHS = [
   '/login',
   '/api/auth/login',
-  '/api/auth/google',      // OAuth callbacks must be accessible (Google redirects here)
-  '/api/auth/outlook',     // OAuth callbacks must be accessible (Microsoft redirects here)
+  '/api/auth/google',
+  '/api/auth/outlook',
 ]
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Allow public paths
   if (PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next()
   }
 
-  // Allow static assets and Next.js internals
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/favicon') ||
@@ -29,28 +27,37 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check session cookie
   const token = req.cookies.get(COOKIE_NAME)?.value
-  if (!token || !(await verifyToken(token, req))) {
-    // Redirect to login for pages, return 401 for API routes
+  const session = token ? await verifyToken(token) : null
+
+  if (!session) {
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const loginUrl = new URL('/login', req.url)
-    return NextResponse.redirect(loginUrl)
+    return NextResponse.redirect(new URL('/login', req.url))
   }
 
-  return NextResponse.next()
+  // Admin-only guard for the settings page
+  if (pathname.startsWith('/settings') && session.role !== 'admin') {
+    return NextResponse.redirect(new URL('/', req.url))
+  }
+
+  // Inject session context into request headers so API routes can read it
+  const requestHeaders = new Headers(req.headers)
+  requestHeaders.set('x-user-id', session.userId)
+  requestHeaders.set('x-user-role', session.role)
+  requestHeaders.set('x-member-id', session.memberId ?? '')
+
+  return NextResponse.next({ request: { headers: requestHeaders } })
 }
 
-async function verifyToken(token: string, req: NextRequest): Promise<boolean> {
+async function verifyToken(token: string): Promise<SessionPayload | null> {
   const dotIdx = token.indexOf('.')
-  if (dotIdx === -1) return false
+  if (dotIdx === -1) return null
 
   const encoded = token.slice(0, dotIdx)
   const sig = token.slice(dotIdx + 1)
 
-  // Use Web Crypto API (Edge runtime compatible)
   const secret = process.env.NEXTAUTH_SECRET || 'familyhub-default-secret'
   const key = await crypto.subtle.importKey(
     'raw',
@@ -60,24 +67,20 @@ async function verifyToken(token: string, req: NextRequest): Promise<boolean> {
     ['sign']
   )
 
-  const expected = await crypto.subtle.sign(
-    'HMAC',
-    key,
-    new TextEncoder().encode(encoded)
-  )
-
+  const expected = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(encoded))
   const expectedHex = Array.from(new Uint8Array(expected))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('')
 
-  if (sig !== expectedHex) return false
+  if (sig !== expectedHex) return null
 
   try {
-    const payload = JSON.parse(atob(encoded))
-    if (payload.exp < Date.now()) return false
-    return payload.authenticated === true
+    const payload = JSON.parse(atob(encoded.replace(/-/g, '+').replace(/_/g, '/'))) as SessionPayload
+    if (payload.exp < Date.now()) return null
+    if (!payload.userId || !payload.role) return null
+    return payload
   } catch {
-    return false
+    return null
   }
 }
 

@@ -104,6 +104,28 @@ export interface AppSettings {
   settingsPin: string           // 4-digit PIN to protect settings, empty = disabled
 }
 
+// ── User Accounts (Phase 3A) ──────────────────────────────────────────────
+
+export type UserRole = 'admin' | 'member' | 'guest'
+
+export interface AppUser {
+  id: string
+  name: string
+  email: string           // lowercase; used as login credential
+  passwordHash: string    // bcrypt hash (cost 12)
+  role: UserRole
+  memberId: string | null // links to FamilyMember; null for guests/unlinked
+  createdAt: string       // ISO
+}
+
+export interface SessionPayload {
+  userId: string
+  role: UserRole
+  memberId: string | null
+  iat: number
+  exp: number
+}
+
 // ── UI types ───────────────────────────────────────────────────────────────
 
 // Extended FamilyMember with client-side UI state (not stored in Redis)

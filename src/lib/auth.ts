@@ -1,54 +1,43 @@
 import { createHmac } from 'crypto'
 import { cookies } from 'next/headers'
+import bcrypt from 'bcryptjs'
+import type { SessionPayload } from './calendar/types'
 
-const COOKIE_NAME = 'familyhub_session'
+export const COOKIE_NAME = 'familyhub_session'
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30 // 30 days in seconds
 
 function secret(): string {
   return process.env.NEXTAUTH_SECRET || 'familyhub-default-secret'
 }
 
-/**
- * Creates a signed session token: base64(payload).signature
- */
-export function createSessionToken(): string {
-  const payload = JSON.stringify({
-    authenticated: true,
-    iat: Date.now(),
-    exp: Date.now() + SESSION_MAX_AGE * 1000,
-  })
-  const encoded = Buffer.from(payload).toString('base64url')
+export function createSessionToken(payload: SessionPayload): string {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
   const sig = createHmac('sha256', secret()).update(encoded).digest('hex')
   return `${encoded}.${sig}`
 }
 
-/**
- * Verifies a session token. Returns true if valid and not expired.
- */
-export function verifySessionToken(token: string): boolean {
+export function verifySessionToken(token: string): SessionPayload | null {
   const dotIdx = token.indexOf('.')
-  if (dotIdx === -1) return false
+  if (dotIdx === -1) return null
 
   const encoded = token.slice(0, dotIdx)
   const sig = token.slice(dotIdx + 1)
 
   const expectedSig = createHmac('sha256', secret()).update(encoded).digest('hex')
-  if (sig !== expectedSig) return false
+  if (sig !== expectedSig) return null
 
   try {
-    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString())
-    if (payload.exp < Date.now()) return false
-    return payload.authenticated === true
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString()) as SessionPayload
+    if (payload.exp < Date.now()) return null
+    if (!payload.userId || !payload.role) return null
+    return payload
   } catch {
-    return false
+    return null
   }
 }
 
-/**
- * Sets the session cookie (call from API route after successful login).
- */
-export async function setSessionCookie(): Promise<void> {
-  const token = createSessionToken()
+export async function setSessionCookie(payload: SessionPayload): Promise<void> {
+  const token = createSessionToken(payload)
   const cookieStore = await cookies()
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
@@ -59,25 +48,22 @@ export async function setSessionCookie(): Promise<void> {
   })
 }
 
-/**
- * Clears the session cookie (logout).
- */
 export async function clearSessionCookie(): Promise<void> {
   const cookieStore = await cookies()
   cookieStore.delete(COOKIE_NAME)
 }
 
-/**
- * Checks if the current request has a valid session (for use in API routes / server components).
- */
-export async function isAuthenticated(): Promise<boolean> {
+export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies()
   const token = cookieStore.get(COOKIE_NAME)?.value
-  if (!token) return false
+  if (!token) return null
   return verifySessionToken(token)
 }
 
-/**
- * The cookie name, exported for middleware to read.
- */
-export { COOKIE_NAME }
+export function hashPassword(plain: string): Promise<string> {
+  return bcrypt.hash(plain, 12)
+}
+
+export function verifyPassword(plain: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(plain, hash)
+}
