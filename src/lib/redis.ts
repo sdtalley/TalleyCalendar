@@ -8,6 +8,8 @@ import type {
   AppUser,
   Chore,
   ChoreCompletion,
+  Routine,
+  RoutineCompletion,
 } from './calendar/types'
 
 // ── Redis client ───────────────────────────────────────────────────────────
@@ -53,6 +55,10 @@ const KEYS = {
   // Chores (Phase 3B)
   choreIds:        'chores:ids',
   choreCompletion: (date: string, choreId: string) => `chore-completion:${date}:${choreId}`,
+
+  // Routines (Phase 3B)
+  routineIds:        'routines:ids',
+  routineCompletion: (date: string, routineId: string) => `routine-completion:${date}:${routineId}`,
 
   // Star balances (Phase 3B)
   starBalance: (memberId: string) => `star-balance:${memberId}`,
@@ -379,6 +385,37 @@ export async function getChoreCompletions(date: string, choreIds: string[]): Pro
   if (choreIds.length === 0) return {}
   const results = await Promise.all(choreIds.map(id => getChoreCompletion(date, id)))
   return Object.fromEntries(choreIds.map((id, i) => [id, results[i]]))
+}
+
+// ── Routines (Phase 3B) ───────────────────────────────────────────────────
+
+const routineHelpers = createEntityHelpers<Routine>('routine', KEYS.routineIds)
+
+export const getRoutines    = ()                                             => routineHelpers.getAll()
+export const getRoutine     = (id: string)                                   => routineHelpers.getById(id)
+export const createRoutine  = (r: Routine)                                   => routineHelpers.create(r)
+export const updateRoutine  = (id: string, u: Partial<Omit<Routine,'id'>>) => routineHelpers.update(id, u)
+export const deleteRoutine  = (id: string)                                   => routineHelpers.remove(id)
+
+export async function getRoutineCompletion(date: string, routineId: string): Promise<RoutineCompletion | null> {
+  return redis.get<RoutineCompletion>(KEYS.routineCompletion(date, routineId))
+}
+
+export async function setRoutineCompletion(date: string, routineId: string, completion: RoutineCompletion): Promise<void> {
+  await redis.set(KEYS.routineCompletion(date, routineId), completion)
+}
+
+export async function removeRoutineCompletion(date: string, routineId: string): Promise<boolean> {
+  const existing = await getRoutineCompletion(date, routineId)
+  if (!existing) return false
+  await redis.del(KEYS.routineCompletion(date, routineId))
+  return true
+}
+
+export async function getRoutineCompletions(date: string, routineIds: string[]): Promise<Record<string, RoutineCompletion | null>> {
+  if (routineIds.length === 0) return {}
+  const results = await Promise.all(routineIds.map(id => getRoutineCompletion(date, id)))
+  return Object.fromEntries(routineIds.map((id, i) => [id, results[i]]))
 }
 
 // ── Star Balances (Phase 3B) ──────────────────────────────────────────────

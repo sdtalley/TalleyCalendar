@@ -162,6 +162,29 @@ export interface ChoreCompletion {
   completedByMemberId?: string
 }
 
+// ── Routines (Phase 3B) ───────────────────────────────────────────────────
+
+export type RoutineTimeBlock = 'morning' | 'afternoon' | 'evening'
+
+export interface Routine {
+  id: string
+  title: string
+  emoji?: string
+  memberIds: string[]
+  timeBlock: RoutineTimeBlock
+  repeat: 'daily' | { weekly: number[] }  // days 0=Sun..6=Sat
+  starValue: number
+  order?: number       // display order within time block
+  createdAt: string    // ISO
+  updatedAt: string    // ISO
+}
+
+export interface RoutineCompletion {
+  status: 'complete' | 'skipped'
+  completedAt: string
+  completedByMemberId?: string
+}
+
 // ── UI types ───────────────────────────────────────────────────────────────
 
 // Extended FamilyMember with client-side UI state (not stored in Redis)

@@ -1,9 +1,15 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import type { Chore, ChoreCompletion, FamilyMember, SessionPayload } from '@/lib/calendar/types'
+import type {
+  Chore, ChoreCompletion,
+  Routine, RoutineCompletion, RoutineTimeBlock,
+  FamilyMember, SessionPayload,
+} from '@/lib/calendar/types'
 import { ChoreCard } from '@/components/tasks/ChoreCard'
 import { ChoreForm, type ChoreFormData } from '@/components/tasks/ChoreForm'
+import { RoutineCard } from '@/components/tasks/RoutineCard'
+import { RoutineForm, type RoutineFormData } from '@/components/tasks/RoutineForm'
 
 type SubTab = 'chores' | 'routines'
 
@@ -245,10 +251,11 @@ export function TasksTab() {
       </div>
 
       {subTab === 'routines' ? (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)', flexDirection: 'column', gap: 8 }}>
-          <span style={{ fontSize: 40 }}>🌅</span>
-          <div style={{ fontSize: 16 }}>Routines — coming in Phase 3B Feature 5</div>
-        </div>
+        <RoutinesView
+          members={members}
+          session={session}
+          isAdmin={isAdmin}
+        />
       ) : (
         <>
           {/* Date nav + member filter */}
@@ -405,4 +412,293 @@ const navBtn: React.CSSProperties = {
   background: 'var(--surface2)', border: '1px solid var(--border)',
   color: 'var(--text)', fontSize: 16, cursor: 'pointer',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
+}
+
+// ── RoutinesView ──────────────────────────────────────────────────────────
+
+const TIME_BLOCKS: { id: RoutineTimeBlock; label: string; emoji: string; color: string; hours: string }[] = [
+  { id: 'morning',   label: 'Morning',   emoji: '🌅', color: '#fbbf24', hours: 'midnight – noon' },
+  { id: 'afternoon', label: 'Afternoon', emoji: '☀️', color: '#34d399', hours: 'noon – 6 pm' },
+  { id: 'evening',   label: 'Evening',   emoji: '🌙', color: '#818cf8', hours: '6 pm – midnight' },
+]
+
+function getCurrentTimeBlock(): RoutineTimeBlock {
+  const h = new Date().getHours()
+  if (h < 12) return 'morning'
+  if (h < 18) return 'afternoon'
+  return 'evening'
+}
+
+function routineIsActiveOnDate(routine: Routine, date: string): boolean {
+  if (routine.repeat === 'daily') return true
+  const days = (routine.repeat as { weekly: number[] }).weekly
+  const dow = new Date(date + 'T12:00:00').getDay()
+  return days.includes(dow)
+}
+
+interface RoutinesViewProps {
+  members:  FamilyMember[]
+  session:  SessionPayload | null
+  isAdmin:  boolean
+}
+
+function RoutinesView({ members, session, isAdmin }: RoutinesViewProps) {
+  const [viewDate,    setViewDate]    = useState(today)
+  const [routines,    setRoutines]    = useState<Routine[]>([])
+  const [completions, setCompletions] = useState<Record<string, RoutineCompletion | null>>({})
+  const [loading,     setLoading]     = useState(true)
+  const [filterIds,   setFilterIds]   = useState<string[]>([])
+  const [collapsed,   setCollapsed]   = useState<Set<RoutineTimeBlock>>(new Set())
+  const [showForm,    setShowForm]    = useState(false)
+  const [editRoutine, setEditRoutine] = useState<Routine | null>(null)
+
+  const currentBlock = getCurrentTimeBlock()
+  const t = today()
+
+  const loadRoutines = useCallback(async (date: string) => {
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/routines?date=${date}`)
+      if (res.ok) {
+        const { routines: r, completions: c } = await res.json()
+        setRoutines(r)
+        setCompletions(c)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { loadRoutines(viewDate) }, [viewDate, loadRoutines])
+
+  const toggleFilter = (id: string) =>
+    setFilterIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+
+  const toggleCollapse = (block: RoutineTimeBlock) =>
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      next.has(block) ? next.delete(block) : next.add(block)
+      return next
+    })
+
+  const visibleRoutines = routines.filter(r => {
+    if (!routineIsActiveOnDate(r, viewDate)) return false
+    if (filterIds.length > 0 && !r.memberIds.some(id => filterIds.includes(id))) return false
+    return true
+  })
+
+  // ── Completion actions ──────────────────────────────────────────────────
+
+  const handleComplete = useCallback(async (id: string, date: string, memberId?: string) => {
+    const res = await fetch(`/api/routines/${id}/complete`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, memberId }),
+    })
+    if (res.ok) {
+      const { completion } = await res.json()
+      setCompletions(prev => ({ ...prev, [id]: completion }))
+    }
+  }, [])
+
+  const handleUncomplete = useCallback(async (id: string, date: string) => {
+    const res = await fetch(`/api/routines/${id}/complete`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date }),
+    })
+    if (res.ok) setCompletions(prev => ({ ...prev, [id]: null }))
+  }, [])
+
+  const handleSkip = useCallback(async (id: string, date: string, memberId?: string) => {
+    const res = await fetch(`/api/routines/${id}/skip`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date, memberId }),
+    })
+    if (res.ok) {
+      const { completion } = await res.json()
+      setCompletions(prev => ({ ...prev, [id]: completion }))
+    }
+  }, [])
+
+  // ── Create / edit ───────────────────────────────────────────────────────
+
+  const handleSaveRoutine = useCallback(async (data: RoutineFormData) => {
+    if (editRoutine) {
+      await fetch(`/api/routines/${editRoutine.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+    } else {
+      await fetch('/api/routines', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+    }
+    setEditRoutine(null)
+    setShowForm(false)
+    await loadRoutines(viewDate)
+  }, [editRoutine, viewDate, loadRoutines])
+
+  const handleDeleteRoutine = useCallback(async () => {
+    if (!editRoutine) return
+    await fetch(`/api/routines/${editRoutine.id}`, { method: 'DELETE' })
+    setEditRoutine(null)
+    setShowForm(false)
+    await loadRoutines(viewDate)
+  }, [editRoutine, viewDate, loadRoutines])
+
+  const openEdit = useCallback((r: Routine) => { setEditRoutine(r); setShowForm(true) }, [])
+
+  // ── Render ──────────────────────────────────────────────────────────────
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Date nav + member filter */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 16px', borderBottom: '1px solid var(--border)',
+        background: 'var(--surface)', flexShrink: 0, gap: 12, flexWrap: 'wrap',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button type="button" onClick={() => setViewDate(d => offsetDate(d, -1))} style={navBtn}>←</button>
+          <button type="button" onClick={() => setViewDate(today())} style={{
+            fontSize: 14, fontWeight: 600,
+            color: viewDate === t ? 'var(--accent)' : 'var(--text)',
+            background: 'none', border: 'none', cursor: 'pointer', minWidth: 100, textAlign: 'center',
+          }}>
+            {formatViewDate(viewDate)}
+          </button>
+          <button type="button" onClick={() => setViewDate(d => offsetDate(d, 1))} style={navBtn}>→</button>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {members.map(m => {
+            const active = filterIds.includes(m.id)
+            return (
+              <button key={m.id} type="button" onClick={() => toggleFilter(m.id)} style={{
+                padding: '5px 10px', borderRadius: 16, fontSize: 12,
+                background: active ? `${m.color}22` : 'var(--surface2)',
+                border: `1.5px solid ${active ? m.color : 'var(--border)'}`,
+                color: active ? m.color : 'var(--text-dim)',
+                cursor: 'pointer', fontWeight: active ? 600 : 400, transition: 'all 0.15s',
+              }}>
+                {m.name}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Time block sections */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {loading ? (
+          <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 40 }}>Loading…</div>
+        ) : (
+          TIME_BLOCKS.map(block => {
+            const blockRoutines = visibleRoutines
+              .filter(r => r.timeBlock === block.id)
+              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.title.localeCompare(b.title))
+            const isCurrent  = block.id === currentBlock && viewDate === t
+            const isCollapsed = collapsed.has(block.id)
+            const doneCount  = blockRoutines.filter(r => completions[r.id]?.status === 'complete').length
+            const totalCount = blockRoutines.length
+
+            return (
+              <div key={block.id} style={{
+                background: 'var(--surface)',
+                border: `1px solid ${isCurrent ? block.color + '55' : 'var(--border)'}`,
+                borderRadius: 'var(--radius)',
+                overflow: 'hidden',
+                boxShadow: isCurrent ? `0 0 0 1px ${block.color}33` : 'none',
+              }}>
+                {/* Block header */}
+                <button
+                  type="button"
+                  onClick={() => toggleCollapse(block.id)}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '12px 14px', background: 'none', border: 'none', cursor: 'pointer',
+                    borderBottom: isCollapsed ? 'none' : '1px solid var(--border)',
+                  }}
+                >
+                  <span style={{ fontSize: 20 }}>{block.emoji}</span>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: isCurrent ? block.color : 'var(--text)' }}>
+                    {block.label}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--text-faint)', marginLeft: 2 }}>{block.hours}</span>
+                  {isCurrent && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, color: block.color,
+                      background: `${block.color}22`, padding: '2px 7px', borderRadius: 10,
+                    }}>NOW</span>
+                  )}
+                  <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-dim)' }}>
+                    {doneCount}/{totalCount}
+                  </span>
+                  <span style={{ color: 'var(--text-faint)', fontSize: 14 }}>{isCollapsed ? '▸' : '▾'}</span>
+                </button>
+
+                {/* Routine cards */}
+                {!isCollapsed && (
+                  <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {blockRoutines.length === 0 ? (
+                      <div style={{ color: 'var(--text-faint)', fontSize: 13, textAlign: 'center', padding: '8px 0' }}>
+                        No routines for {block.label.toLowerCase()}
+                        {isAdmin && ' — tap + Add Routine'}
+                      </div>
+                    ) : (
+                      blockRoutines.map(r => (
+                        <RoutineCard
+                          key={r.id}
+                          routine={r}
+                          completion={completions[r.id] ?? null}
+                          members={members}
+                          viewDate={viewDate}
+                          currentMemberId={session?.memberId}
+                          onComplete={handleComplete}
+                          onUncomplete={handleUncomplete}
+                          onSkip={handleSkip}
+                          onEdit={isAdmin ? openEdit : undefined}
+                        />
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* Add Routine button (admin only) */}
+      {isAdmin && (
+        <div style={{
+          padding: '12px 16px', borderTop: '1px solid var(--border)',
+          background: 'var(--surface)', flexShrink: 0,
+        }}>
+          <button
+            type="button"
+            onClick={() => { setEditRoutine(null); setShowForm(true) }}
+            style={{
+              width: '100%', padding: '13px 0', borderRadius: 12,
+              background: 'var(--accent)', border: 'none',
+              color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+              boxShadow: '0 2px 12px rgba(108,140,255,0.3)',
+            }}
+          >
+            + Add Routine
+          </button>
+        </div>
+      )}
+
+      {/* Routine form modal */}
+      {showForm && (
+        <RoutineForm
+          routine={editRoutine ?? undefined}
+          members={members}
+          onSave={handleSaveRoutine}
+          onDelete={editRoutine ? handleDeleteRoutine : undefined}
+          onClose={() => { setShowForm(false); setEditRoutine(null) }}
+        />
+      )}
+    </div>
+  )
 }
