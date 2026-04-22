@@ -185,6 +185,28 @@ export interface RoutineCompletion {
   completedByMemberId?: string
 }
 
+// ── Lists (Phase 3B) ─────────────────────────────────────────────────────
+
+export type ListType = 'todo' | 'grocery' | 'other'
+
+export interface ListItem {
+  id: string
+  text: string
+  checked: boolean
+  subcategory?: string   // grouping header within the list
+  order: number          // display order; new items append at max+1
+}
+
+export interface AppList {
+  id: string
+  title: string
+  type: ListType
+  color: string          // hex color for the list card
+  items: ListItem[]
+  createdAt: string      // ISO
+  updatedAt: string      // ISO
+}
+
 // ── UI types ───────────────────────────────────────────────────────────────
 
 // Extended FamilyMember with client-side UI state (not stored in Redis)

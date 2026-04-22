@@ -10,6 +10,8 @@ import type {
   ChoreCompletion,
   Routine,
   RoutineCompletion,
+  AppList,
+  ListItem,
 } from './calendar/types'
 
 // ── Redis client ───────────────────────────────────────────────────────────
@@ -62,6 +64,9 @@ const KEYS = {
 
   // Star balances (Phase 3B)
   starBalance: (memberId: string) => `star-balance:${memberId}`,
+
+  // Lists (Phase 3B)
+  listIds: 'lists:ids',
 } as const
 
 // ── Entity helper factory ──────────────────────────────────────────────────
@@ -429,4 +434,53 @@ export async function adjustStarBalance(memberId: string, delta: number): Promis
   const newBalance = Math.max(0, current + delta)
   await redis.set(KEYS.starBalance(memberId), newBalance)
   return newBalance
+}
+
+// ── Lists (Phase 3B) ──────────────────────────────────────────────────────
+
+const listHelpers = createEntityHelpers<AppList>('list', KEYS.listIds)
+
+export const getLists    = ()                                               => listHelpers.getAll()
+export const getList     = (id: string)                                     => listHelpers.getById(id)
+export const createList  = (list: AppList)                                  => listHelpers.create(list)
+export const updateList  = (id: string, u: Partial<Omit<AppList, 'id'>>) => listHelpers.update(id, u)
+export const deleteList  = (id: string)                                     => listHelpers.remove(id)
+
+export async function addListItem(listId: string, item: ListItem): Promise<AppList | null> {
+  const list = await getList(listId)
+  if (!list) return null
+  const updated = { ...list, items: [...list.items, item], updatedAt: new Date().toISOString() }
+  await redis.set(`list:${listId}`, updated)
+  return updated
+}
+
+export async function updateListItem(
+  listId: string,
+  itemId: string,
+  updates: Partial<Omit<ListItem, 'id'>>
+): Promise<AppList | null> {
+  const list = await getList(listId)
+  if (!list) return null
+  const items = list.items.map(it => it.id === itemId ? { ...it, ...updates } : it)
+  const updated = { ...list, items, updatedAt: new Date().toISOString() }
+  await redis.set(`list:${listId}`, updated)
+  return updated
+}
+
+export async function deleteListItem(listId: string, itemId: string): Promise<AppList | null> {
+  const list = await getList(listId)
+  if (!list) return null
+  const items = list.items.filter(it => it.id !== itemId)
+  const updated = { ...list, items, updatedAt: new Date().toISOString() }
+  await redis.set(`list:${listId}`, updated)
+  return updated
+}
+
+export async function clearCheckedItems(listId: string): Promise<AppList | null> {
+  const list = await getList(listId)
+  if (!list) return null
+  const items = list.items.filter(it => !it.checked)
+  const updated = { ...list, items, updatedAt: new Date().toISOString() }
+  await redis.set(`list:${listId}`, updated)
+  return updated
 }
