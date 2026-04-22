@@ -6,14 +6,21 @@ export interface FamilyMember {
   id: string
   name: string
   color: string
-  localOnly?: boolean                          // no external account; events stored in Redis
-  defaultCalendarType?: 'kids' | 'shared'     // calendarType applied to all local events
+  localOnly?: boolean
+  defaultCalendarType?: 'kids' | 'shared'
+  avatar?: {
+    type: 'emoji' | 'initials'
+    value: string   // emoji char, or custom initials (1-2 chars); auto-generated from name if empty
+  }
+  profileType?: 'person' | 'other'   // defaults to 'person' when absent
+  profileCategory?: string           // 'Birthdays' | 'Pets' | 'Sports' | 'School' | etc.
 }
 
 // ── Local Event (stored in Redis for localOnly members) ────────────────────
 export interface LocalEvent {
   id: string
   memberId: string
+  memberIds?: string[]   // multi-profile; if set, overrides memberId for display
   calendarType: 'kids' | 'shared'
   title: string
   description?: string
@@ -77,6 +84,7 @@ export interface CalendarEvent {
   recurring: boolean
   recurrenceRule?: string
   familyMemberId: string
+  memberIds?: string[]   // multi-profile assignment; if set, overrides familyMemberId for display
   calendarType: CalendarType
   color: string
   source: {

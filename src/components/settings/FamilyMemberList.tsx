@@ -8,6 +8,45 @@ const PRESET_COLORS = [
   '#f472b6', '#34d399', '#fbbf24', '#818cf8', '#fb923c', '#22d3ee',
 ]
 
+const PROFILE_CATEGORIES = ['Birthdays', 'Pets', 'Sports', 'School', 'Holidays']
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  if (parts.length === 1) return (parts[0][0] ?? '?').toUpperCase()
+  return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase()
+}
+
+function getAvatarContent(member: FamilyMember): string {
+  if (member.avatar?.type === 'emoji') return member.avatar.value || '👤'
+  if (member.avatar?.type === 'initials' && member.avatar.value) return member.avatar.value
+  return getInitials(member.name)
+}
+
+function MemberAvatarDisplay({ member, size = 32 }: { member: FamilyMember; size?: number }) {
+  const content = getAvatarContent(member)
+  const isEmoji = member.avatar?.type === 'emoji'
+  return (
+    <span
+      style={{
+        width: size, height: size,
+        borderRadius: '50%',
+        background: member.color,
+        color: '#fff',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: isEmoji ? size * 0.55 : size * 0.38,
+        fontWeight: 700,
+        flexShrink: 0,
+        lineHeight: 1,
+      }}
+    >
+      {content}
+    </span>
+  )
+}
+
 interface FamilyMemberListProps {
   members: FamilyMember[]
   onAdd: (member: Omit<FamilyMember, 'id'>) => Promise<void>
@@ -22,6 +61,10 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
   const [color, setColor] = useState(PRESET_COLORS[0])
   const [localOnly, setLocalOnly] = useState(false)
   const [defaultCalendarType, setDefaultCalendarType] = useState<'kids' | 'shared'>('shared')
+  const [avatarType, setAvatarType] = useState<'initials' | 'emoji'>('initials')
+  const [avatarValue, setAvatarValue] = useState('')
+  const [profileType, setProfileType] = useState<'person' | 'other'>('person')
+  const [profileCategory, setProfileCategory] = useState('')
   const [saving, setSaving] = useState(false)
 
   function startAdd() {
@@ -31,6 +74,10 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
     setColor(PRESET_COLORS[members.length % PRESET_COLORS.length])
     setLocalOnly(false)
     setDefaultCalendarType('shared')
+    setAvatarType('initials')
+    setAvatarValue('')
+    setProfileType('person')
+    setProfileCategory('')
   }
 
   function startEdit(member: FamilyMember) {
@@ -40,6 +87,10 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
     setColor(member.color)
     setLocalOnly(member.localOnly ?? false)
     setDefaultCalendarType(member.defaultCalendarType ?? 'shared')
+    setAvatarType(member.avatar?.type ?? 'initials')
+    setAvatarValue(member.avatar?.value ?? '')
+    setProfileType(member.profileType ?? 'person')
+    setProfileCategory(member.profileCategory ?? '')
   }
 
   function cancel() {
@@ -57,6 +108,13 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
         color,
         localOnly: localOnly || undefined,
         defaultCalendarType: localOnly ? defaultCalendarType : undefined,
+        avatar: avatarValue.trim()
+          ? { type: avatarType, value: avatarValue.trim() }
+          : undefined,
+        profileType: profileType === 'other' ? 'other' : undefined,
+        profileCategory: profileType === 'other' && profileCategory.trim()
+          ? profileCategory.trim()
+          : undefined,
       }
       if (adding) {
         await onAdd(payload)
@@ -95,18 +153,17 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
           <div key={member.id}>
             {editingId === member.id ? (
               <MemberForm
-                name={name}
-                color={color}
-                localOnly={localOnly}
+                name={name} color={color} localOnly={localOnly}
                 defaultCalendarType={defaultCalendarType}
-                onNameChange={setName}
-                onColorChange={setColor}
+                avatarType={avatarType} avatarValue={avatarValue}
+                profileType={profileType} profileCategory={profileCategory}
+                onNameChange={setName} onColorChange={setColor}
                 onLocalOnlyChange={setLocalOnly}
                 onDefaultCalendarTypeChange={setDefaultCalendarType}
-                onSave={handleSave}
-                onCancel={cancel}
-                saving={saving}
-                saveLabel="Save"
+                onAvatarTypeChange={setAvatarType} onAvatarValueChange={setAvatarValue}
+                onProfileTypeChange={setProfileType}
+                onProfileCategoryChange={setProfileCategory}
+                onSave={handleSave} onCancel={cancel} saving={saving} saveLabel="Save"
               />
             ) : (
               <div
@@ -114,34 +171,38 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
                 style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}
               >
                 <div className="flex items-center gap-3">
-                  <span
-                    className="w-4 h-4 rounded-full flex-shrink-0"
-                    style={{ background: member.color }}
-                  />
-                  <span className="text-[15px] font-medium" style={{ color: 'var(--text)' }}>
-                    {member.name}
-                  </span>
-                  {member.localOnly && (
-                    <span
-                      className="text-[11px] px-2 py-0.5 rounded-full font-medium"
-                      style={{
-                        background: member.defaultCalendarType === 'kids'
-                          ? 'rgba(78,205,196,0.15)'
-                          : 'rgba(108,140,255,0.15)',
-                        color: member.defaultCalendarType === 'kids' ? '#4ecdc4' : '#6c8cff',
-                      }}
-                    >
-                      {member.defaultCalendarType === 'kids' ? 'Kids · Local' : 'Family · Local'}
-                    </span>
-                  )}
+                  <MemberAvatarDisplay member={member} />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[15px] font-medium" style={{ color: 'var(--text)' }}>
+                        {member.name}
+                      </span>
+                      {member.profileType === 'other' && member.profileCategory && (
+                        <span
+                          className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                          style={{ background: 'var(--surface3)', color: 'var(--text-dim)', border: '1px solid var(--border)' }}
+                        >
+                          {member.profileCategory}
+                        </span>
+                      )}
+                      {member.localOnly && (
+                        <span
+                          className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                          style={{
+                            background: member.defaultCalendarType === 'kids'
+                              ? 'rgba(78,205,196,0.15)'
+                              : 'rgba(108,140,255,0.15)',
+                            color: member.defaultCalendarType === 'kids' ? '#4ecdc4' : '#6c8cff',
+                          }}
+                        >
+                          {member.defaultCalendarType === 'kids' ? 'Kids · Local' : 'Family · Local'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => startEdit(member)}
-                    className="settings-btn-ghost"
-                  >
-                    Edit
-                  </button>
+                  <button onClick={() => startEdit(member)} className="settings-btn-ghost">Edit</button>
                   <button
                     onClick={() => handleRemove(member.id, member.name)}
                     className="settings-btn-ghost"
@@ -157,18 +218,17 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
 
         {adding && (
           <MemberForm
-            name={name}
-            color={color}
-            localOnly={localOnly}
+            name={name} color={color} localOnly={localOnly}
             defaultCalendarType={defaultCalendarType}
-            onNameChange={setName}
-            onColorChange={setColor}
+            avatarType={avatarType} avatarValue={avatarValue}
+            profileType={profileType} profileCategory={profileCategory}
+            onNameChange={setName} onColorChange={setColor}
             onLocalOnlyChange={setLocalOnly}
             onDefaultCalendarTypeChange={setDefaultCalendarType}
-            onSave={handleSave}
-            onCancel={cancel}
-            saving={saving}
-            saveLabel="Add"
+            onAvatarTypeChange={setAvatarType} onAvatarValueChange={setAvatarValue}
+            onProfileTypeChange={setProfileType}
+            onProfileCategoryChange={setProfileCategory}
+            onSave={handleSave} onCancel={cancel} saving={saving} saveLabel="Add"
           />
         )}
       </div>
@@ -182,29 +242,49 @@ export function FamilyMemberList({ members, onAdd, onUpdate, onRemove }: FamilyM
   )
 }
 
-function MemberForm({
-  name, color, localOnly, defaultCalendarType,
-  onNameChange, onColorChange, onLocalOnlyChange, onDefaultCalendarTypeChange,
-  onSave, onCancel, saving, saveLabel,
-}: {
+// ── MemberForm ─────────────────────────────────────────────────────────────
+
+interface MemberFormProps {
   name: string
   color: string
   localOnly: boolean
   defaultCalendarType: 'kids' | 'shared'
+  avatarType: 'initials' | 'emoji'
+  avatarValue: string
+  profileType: 'person' | 'other'
+  profileCategory: string
   onNameChange: (v: string) => void
   onColorChange: (v: string) => void
   onLocalOnlyChange: (v: boolean) => void
   onDefaultCalendarTypeChange: (v: 'kids' | 'shared') => void
+  onAvatarTypeChange: (v: 'initials' | 'emoji') => void
+  onAvatarValueChange: (v: string) => void
+  onProfileTypeChange: (v: 'person' | 'other') => void
+  onProfileCategoryChange: (v: string) => void
   onSave: () => void
   onCancel: () => void
   saving: boolean
   saveLabel: string
-}) {
+}
+
+function MemberForm({
+  name, color, localOnly, defaultCalendarType,
+  avatarType, avatarValue, profileType, profileCategory,
+  onNameChange, onColorChange, onLocalOnlyChange, onDefaultCalendarTypeChange,
+  onAvatarTypeChange, onAvatarValueChange, onProfileTypeChange, onProfileCategoryChange,
+  onSave, onCancel, saving, saveLabel,
+}: MemberFormProps) {
+  const previewMember: FamilyMember = {
+    id: '', name, color,
+    avatar: avatarValue.trim() ? { type: avatarType, value: avatarValue.trim() } : undefined,
+  }
+
   return (
     <div
       className="px-4 py-4 rounded-xl flex flex-col gap-3"
       style={{ background: 'var(--surface2)', border: '1px solid var(--accent)' }}
     >
+      {/* Name */}
       <div className="flex gap-3">
         <div className="flex flex-col gap-1.5 flex-1">
           <label className="field-label">Name</label>
@@ -219,6 +299,7 @@ function MemberForm({
         </div>
       </div>
 
+      {/* Color */}
       <div className="flex flex-col gap-1.5">
         <label className="field-label">Color</label>
         <div className="flex gap-2 flex-wrap">
@@ -236,6 +317,100 @@ function MemberForm({
           ))}
         </div>
       </div>
+
+      {/* Avatar */}
+      <div className="flex flex-col gap-1.5">
+        <label className="field-label">Avatar</label>
+        <div className="flex items-center gap-3">
+          <div
+            className="flex rounded-lg overflow-hidden"
+            style={{ border: '1px solid var(--border)' }}
+          >
+            {(['initials', 'emoji'] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => onAvatarTypeChange(t)}
+                className="px-3 py-1.5 text-[12px] font-medium border-none cursor-pointer transition-all"
+                style={{
+                  background: avatarType === t ? 'var(--accent)' : 'transparent',
+                  color: avatarType === t ? '#fff' : 'var(--text-dim)',
+                }}
+              >
+                {t === 'initials' ? 'Initials' : 'Emoji'}
+              </button>
+            ))}
+          </div>
+          {avatarType === 'emoji' ? (
+            <input
+              type="text"
+              placeholder="✨"
+              value={avatarValue}
+              onChange={e => onAvatarValueChange(e.target.value.slice(-2))}
+              style={{ width: 56, textAlign: 'center', fontSize: 20 }}
+            />
+          ) : (
+            <input
+              type="text"
+              placeholder={getInitials(name) || 'AB'}
+              value={avatarValue}
+              onChange={e => onAvatarValueChange(e.target.value.slice(0, 2).toUpperCase())}
+              maxLength={2}
+              style={{ width: 56, textAlign: 'center', fontWeight: 700, textTransform: 'uppercase', fontSize: 15 }}
+            />
+          )}
+          <MemberAvatarDisplay member={previewMember} size={40} />
+        </div>
+      </div>
+
+      {/* Profile type */}
+      <div className="flex flex-col gap-1.5">
+        <label className="field-label">Profile Type</label>
+        <div className="flex gap-2">
+          {(['person', 'other'] as const).map(pt => (
+            <button
+              key={pt}
+              onClick={() => onProfileTypeChange(pt)}
+              className="flex-1 py-2 rounded-lg text-[13px] font-medium border cursor-pointer transition-all duration-150"
+              style={{
+                background: profileType === pt ? 'var(--accent)' : 'var(--surface3)',
+                borderColor: profileType === pt ? 'var(--accent)' : 'var(--border)',
+                color: profileType === pt ? '#fff' : 'var(--text-dim)',
+              }}
+            >
+              {pt === 'person' ? 'Person' : 'Other (Pets, Birthdays…)'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Category — when profileType = other */}
+      {profileType === 'other' && (
+        <div className="flex flex-col gap-1.5">
+          <label className="field-label">Category</label>
+          <div className="flex flex-wrap gap-1.5 mb-1.5">
+            {PROFILE_CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                onClick={() => onProfileCategoryChange(cat)}
+                className="px-2.5 py-1 rounded-full text-[12px] font-medium border-none cursor-pointer transition-all"
+                style={{
+                  background: profileCategory === cat ? 'var(--accent)' : 'var(--surface3)',
+                  color: profileCategory === cat ? '#fff' : 'var(--text-dim)',
+                  border: `1px solid ${profileCategory === cat ? 'var(--accent)' : 'var(--border)'}`,
+                }}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+          <input
+            type="text"
+            placeholder="Or type a custom category"
+            value={profileCategory}
+            onChange={e => onProfileCategoryChange(e.target.value)}
+          />
+        </div>
+      )}
 
       {/* Local-only toggle */}
       <div
@@ -266,7 +441,7 @@ function MemberForm({
         </div>
       </div>
 
-      {/* Calendar type — only when localOnly */}
+      {/* Calendar type — local only */}
       {localOnly && (
         <div className="flex flex-col gap-1.5">
           <label className="field-label">Calendar type</label>
