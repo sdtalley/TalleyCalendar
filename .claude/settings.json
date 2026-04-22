@@ -1,8 +1,18 @@
 {
   "permissions": {
+    "allow": [
+      "WebFetch(domain:skylight.zendesk.com)",
+      "WebFetch(domain:roadmap.ourskylight.com)",
+      "WebFetch(domain:support.ourskylight.com)",
+      "WebFetch(domain:www.ourskylight.com)",
+      "Bash(git commit -m ' *)",
+      "Bash(npm audit *)",
+      "Read(//c/Users/steven.talley/.claude/projects/c--Users-steven-talley-OneDrive-SoftDev-TalleyCalendar/memory/**)"
+    ],
     "additionalDirectories": [
       "c:\\Users\\steven.talley\\OneDrive\\SoftDev\\TalleyCalendar\\src\\app\\api",
-      "c:\\Users\\steven.talley\\OneDrive\\SoftDev\\TalleyCalendar\\src\\app\\api\\events"
+      "c:\\Users\\steven.talley\\OneDrive\\SoftDev\\TalleyCalendar\\src\\app\\api\\events",
+      "c:\\Users\\steven.talley\\.claude\\projects\\c--Users-steven-talley-OneDrive-SoftDev-TalleyCalendar\\memory"
     ]
   }
 }

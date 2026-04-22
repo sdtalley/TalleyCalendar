@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration'
 
 export const metadata: Metadata = {
   title: 'FamilyHub Calendar',
@@ -16,6 +17,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <ServiceWorkerRegistration />
         {children}
       </body>
     </html>
