@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { sameDay, eventSpansDay, formatTime, formatDateShort } from '@/lib/utils'
-import { DayView } from './DayView'
+
 import type { CalendarEvent } from '@/lib/calendar/types'
 
 const DEFAULT_WIDTH = 300
@@ -175,15 +175,11 @@ export function AgendaSidebar({ selectedDate, events, onEventClick, onReschedule
         </div>
       </div>
 
-      {/* Hours mode — DayView without its own header */}
+      {/* Hours mode placeholder — AgendaSidebar is deprecated */}
       {mode === 'hours' && (
-        <DayView
-          currentDate={selectedDate}
-          events={events}
-          onEventClick={onEventClick}
-          onReschedule={onReschedule}
-          hideHeader
-        />
+        <div className="flex-1 flex items-center justify-center" style={{ color: 'var(--text-faint)' }}>
+          Use the Day view tab
+        </div>
       )}
 
       {/* Agenda mode — upcoming events list + daily notes */}

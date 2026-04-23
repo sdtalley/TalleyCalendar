@@ -87,7 +87,7 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 
 | Tab | Content | Status |
 |---|---|---|
-| **Calendar** | Month / Schedule (1–7 days) / Agenda | ✅ Live |
+| **Calendar** | Month / Schedule (1–7 days) / Day (mini-cal + event list) | ✅ Live |
 | **Tasks** | Chores + Routines (Day/Week view redesign pending) | ✅ Live (partial) |
 | **Rewards** | Stars + Reward redemption | Feature 7 next |
 | **Meals** | Meal planner + Recipe Box | Phase 3C |

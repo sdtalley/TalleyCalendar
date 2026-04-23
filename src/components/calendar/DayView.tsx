@@ -1,421 +1,277 @@
-'use client'
+﻿'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { sameDay, eventSpansDay, formatTime, formatDateShort, hexToRgba } from '@/lib/utils'
+import { useState, useEffect, useMemo } from 'react'
+import { sameDay, eventSpansDay, formatTime, hexToRgba } from '@/lib/utils'
 import type { CalendarEvent } from '@/lib/calendar/types'
 
-const HOURS = Array.from({ length: 24 }, (_, i) => i)
-const HOUR_HEIGHT = 60
+const DAY_ABBR = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
 
 interface DayViewProps {
   currentDate: Date
   events: CalendarEvent[]
   onEventClick: (event: CalendarEvent) => void
-  onDragCreate?: (date: Date, startMinutes: number, endMinutes: number) => void
-  onReschedule?: (event: CalendarEvent, newDate: Date, newStartMinutes: number) => void
-  hideHeader?: boolean
+  onSelectDate: (date: Date) => void
+  onAddEvent?: (date: Date) => void
 }
 
-function snapToQuarter(minutes: number): number {
-  return Math.round(minutes / 15) * 15
-}
+export function DayView({ currentDate, events, onEventClick, onSelectDate, onAddEvent }: DayViewProps) {
+  const today = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
 
-// Assign side-by-side column positions to overlapping timed events
-function computeColumnLayout(events: CalendarEvent[]): Array<{ ev: CalendarEvent; col: number; totalCols: number }> {
-  const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime())
-  const result: Array<{ ev: CalendarEvent; col: number; totalCols: number }> = []
-  let i = 0
-  while (i < sorted.length) {
-    // Expand cluster to include all events that overlap with any event already in it
-    let clusterEnd = sorted[i].end.getTime()
-    let j = i + 1
-    while (j < sorted.length && sorted[j].start.getTime() < clusterEnd) {
-      if (sorted[j].end.getTime() > clusterEnd) clusterEnd = sorted[j].end.getTime()
-      j++
-    }
-    const cluster = sorted.slice(i, j)
-    // Greedily assign columns within the cluster
-    const columns: CalendarEvent[][] = []
-    for (const ev of cluster) {
-      let placed = false
-      for (let c = 0; c < columns.length; c++) {
-        const last = columns[c][columns[c].length - 1]
-        if (last.end.getTime() <= ev.start.getTime()) {
-          columns[c].push(ev)
-          placed = true
-          break
-        }
-      }
-      if (!placed) columns.push([ev])
-    }
-    const totalCols = columns.length
-    for (let c = 0; c < columns.length; c++) {
-      for (const ev of columns[c]) {
-        result.push({ ev, col: c, totalCols })
-      }
-    }
-    i = j
-  }
-  return result
-}
-
-export function DayView({ currentDate, events, onEventClick, onDragCreate, onReschedule, hideHeader }: DayViewProps) {
-  const today = new Date()
-  const bodyRef = useRef<HTMLDivElement>(null)
-  const columnRef = useRef<HTMLDivElement>(null)
-  const isToday = sameDay(currentDate, today)
-  const nowMinutes = today.getHours() * 60 + today.getMinutes()
-
-  // Drag-to-create state
-  const [dragStart, setDragStart] = useState<number | null>(null)
-  const [dragEnd, setDragEnd] = useState<number | null>(null)
-  const dragging = useRef(false)
-
-  // Drag-to-reschedule state
-  const reschedRef = useRef<{
-    event: CalendarEvent
-    clickOffsetMin: number
-    durationMin: number
-    startY: number
-    moved: boolean
-  } | null>(null)
-  const reschedPosRef = useRef<number | null>(null)       // topMin at current position
-  const [reschedView, setReschedView] = useState<{ topMin: number; event: CalendarEvent } | null>(null)
-  const suppressClickRef = useRef<string | null>(null)
-
-  // Edge-scroll
-  const scrollAnimRef = useRef<number | null>(null)
-  const lastMouseRef = useRef<{ clientY: number } | null>(null)
-
-  function stopEdgeScroll() {
-    if (scrollAnimRef.current !== null) {
-      cancelAnimationFrame(scrollAnimRef.current)
-      scrollAnimRef.current = null
-    }
-  }
-
-  function startEdgeScroll(recompute: (clientY: number) => void) {
-    if (scrollAnimRef.current !== null) return
-    const EDGE_ZONE = 60
-    const MAX_SPEED = 10
-
-    function tick() {
-      const mouse = lastMouseRef.current
-      const body = bodyRef.current
-      if (!mouse || !body) { scrollAnimRef.current = null; return }
-
-      const rect = body.getBoundingClientRect()
-      const distTop = mouse.clientY - rect.top
-      const distBot = rect.bottom - mouse.clientY
-      let delta = 0
-      if (distTop < EDGE_ZONE && distTop >= 0) delta = -MAX_SPEED * (1 - distTop / EDGE_ZONE)
-      else if (distBot < EDGE_ZONE && distBot >= 0) delta = MAX_SPEED * (1 - distBot / EDGE_ZONE)
-
-      if (delta !== 0) {
-        body.scrollTop += delta
-        recompute(mouse.clientY)
-      }
-      scrollAnimRef.current = requestAnimationFrame(tick)
-    }
-    scrollAnimRef.current = requestAnimationFrame(tick)
-  }
-
-  // Split events
-  const allDayEvents = events.filter(
-    e => (e.allDay || !sameDay(e.start, e.end)) && eventSpansDay(e.start, e.end, currentDate, e.allDay)
-  )
-  const timedEvents = events.filter(
-    e => !e.allDay && sameDay(e.start, e.end) && sameDay(e.start, currentDate)
+  const [miniCalMonth, setMiniCalMonth] = useState<Date>(
+    () => new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
   )
 
+  const curYear = currentDate.getFullYear()
+  const curMonth = currentDate.getMonth()
   useEffect(() => {
-    if (bodyRef.current) {
-      bodyRef.current.scrollTop = 7 * HOUR_HEIGHT
-    }
-  }, [])
+    setMiniCalMonth(new Date(curYear, curMonth, 1))
+  }, [curYear, curMonth])
 
-  const getMinutesFromY = useCallback((clientY: number): number => {
-    if (!columnRef.current) return 0
-    const rect = columnRef.current.getBoundingClientRect()
-    const scrollTop = bodyRef.current?.scrollTop ?? 0
-    const y = clientY - rect.top + scrollTop
-    const minutes = (y / (24 * HOUR_HEIGHT)) * 24 * 60
-    return Math.max(0, Math.min(24 * 60, snapToQuarter(minutes)))
-  }, [])
+  const calDays = useMemo(() => {
+    const y = miniCalMonth.getFullYear()
+    const m = miniCalMonth.getMonth()
+    const firstDow = new Date(y, m, 1).getDay()
+    const daysInMonth = new Date(y, m + 1, 0).getDate()
+    const cells: (Date | null)[] = []
+    for (let i = 0; i < firstDow; i++) cells.push(null)
+    for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(y, m, d))
+    while (cells.length % 7 !== 0) cells.push(null)
+    return cells
+  }, [miniCalMonth])
 
-  // Drag-to-create handlers
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-event-id]')) return
-    if ((e.target as HTMLElement).closest('button')) return
-    dragging.current = true
-    const min = getMinutesFromY(e.clientY)
-    setDragStart(min)
-    setDragEnd(min + 30)
-  }, [getMinutesFromY])
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragging.current || dragStart === null) return
-    setDragEnd(getMinutesFromY(e.clientY))
-  }, [dragStart, getMinutesFromY])
-
-  const handleMouseUp = useCallback(() => {
-    if (!dragging.current || dragStart === null || dragEnd === null) {
-      dragging.current = false
-      return
-    }
-    dragging.current = false
-    const start = Math.min(dragStart, dragEnd)
-    const end = Math.max(dragStart, dragEnd)
-    if (end - start >= 15 && onDragCreate) {
-      onDragCreate(currentDate, start, end)
-    }
-    setDragStart(null)
-    setDragEnd(null)
-  }, [dragStart, dragEnd, currentDate, onDragCreate])
-
-  const handleMouseLeave = useCallback(() => {
-    if (dragging.current) {
-      dragging.current = false
-      setDragStart(null)
-      setDragEnd(null)
-    }
-  }, [])
-
-  // Drag-to-reschedule: start on event mousedown
-  const handleEventMouseDown = useCallback((e: React.MouseEvent, ev: CalendarEvent) => {
-    if (!onReschedule || (ev.provider !== 'google' && ev.provider !== 'outlook')) return
-    if (ev.calendarType === 'work') return
-
-    e.stopPropagation()
-
-    const clickMin = getMinutesFromY(e.clientY)
-    const eventStartMin = ev.start.getHours() * 60 + ev.start.getMinutes()
-    const eventEndMin = ev.end.getHours() * 60 + ev.end.getMinutes()
-
-    reschedRef.current = {
-      event: ev,
-      clickOffsetMin: Math.max(0, clickMin - eventStartMin),
-      durationMin: Math.max(15, eventEndMin - eventStartMin),
-      startY: e.clientY,
-      moved: false,
-    }
-    reschedPosRef.current = eventStartMin
-
-    function recompute(clientY: number) {
-      const rref = reschedRef.current
-      if (!rref) return
-      const rawMin = getMinutesFromY(clientY)
-      const newTopMin = snapToQuarter(
-        Math.max(0, Math.min(24 * 60 - rref.durationMin, rawMin - rref.clickOffsetMin))
+  const dayEvents = useMemo(() => {
+    const dayStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate())
+    const dayEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + 1)
+    return events
+      .filter(e =>
+        e.allDay
+          ? eventSpansDay(e.start, e.end, currentDate, true)
+          : e.start < dayEnd && e.end > dayStart
       )
-      reschedPosRef.current = newTopMin
-      setReschedView({ topMin: newTopMin, event: rref.event })
-    }
+      .sort((a, b) => {
+        if (a.allDay !== b.allDay) return a.allDay ? -1 : 1
+        return a.start.getTime() - b.start.getTime()
+      })
+  }, [currentDate, events])
 
-    function onGlobalMove(me: MouseEvent) {
-      const rref = reschedRef.current
-      if (!rref) return
-      if (Math.abs(me.clientY - rref.startY) > 8) rref.moved = true
-      if (!rref.moved) return
-      lastMouseRef.current = { clientY: me.clientY }
-      recompute(me.clientY)
-      startEdgeScroll(recompute)
-    }
+  function headerLabel(): string {
+    const d = new Date(currentDate)
+    d.setHours(0, 0, 0, 0)
+    if (sameDay(d, today)) return 'Today'
+    const tom = new Date(today)
+    tom.setDate(today.getDate() + 1)
+    if (sameDay(d, tom)) return 'Tomorrow'
+    const yest = new Date(today)
+    yest.setDate(today.getDate() - 1)
+    if (sameDay(d, yest)) return 'Yesterday'
+    return currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+  }
 
-    function onGlobalUp() {
-      document.removeEventListener('mousemove', onGlobalMove)
-      document.removeEventListener('mouseup', onGlobalUp)
-      stopEdgeScroll()
-      lastMouseRef.current = null
-
-      const rref = reschedRef.current
-      const pos = reschedPosRef.current
-      reschedRef.current = null
-      reschedPosRef.current = null
-      setReschedView(null)
-
-      if (rref?.moved && pos !== null && onReschedule) {
-        suppressClickRef.current = rref.event.id
-        if (rref.event.calendarType === 'personal') {
-          const newTime = formatTime(new Date(0, 0, 0, Math.floor(pos / 60), pos % 60))
-          if (!window.confirm(`Move "${rref.event.title}" to ${newTime}?\n\nThis is a personal event.`)) return
-        }
-        onReschedule(rref.event, currentDate, pos)
-      }
-    }
-
-    document.addEventListener('mousemove', onGlobalMove)
-    document.addEventListener('mouseup', onGlobalUp)
-  }, [getMinutesFromY, onReschedule, currentDate]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const previewTop = dragStart !== null && dragEnd !== null
-    ? (Math.min(dragStart, dragEnd) / 60) * HOUR_HEIGHT
-    : 0
-  const previewHeight = dragStart !== null && dragEnd !== null
-    ? (Math.abs(dragEnd - dragStart) / 60) * HOUR_HEIGHT
-    : 0
+  const label = headerLabel()
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      {!hideHeader && (
-        <div
-          className="flex-shrink-0 px-6 py-4"
-          style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
-        >
-          <div className="text-[28px] font-bold tracking-tight">
-            {formatDateShort(currentDate)}
-            {isToday && (
-              <span className="ml-3 text-base font-semibold" style={{ color: 'var(--accent)' }}>
-                Today
+    <div className="flex h-full overflow-hidden">
+      {/* LEFT: Mini month calendar — desktop only */}
+      <div
+        className="hidden md:flex flex-col flex-shrink-0"
+        style={{
+          width: '38%',
+          maxWidth: 440,
+          background: 'var(--surface)',
+          borderRight: '1px solid var(--border)',
+        }}
+      >
+        <div className="flex flex-col justify-center flex-1 py-8 px-4">
+          <div style={{ maxWidth: 340, margin: '0 auto', width: '100%' }}>
+
+            {/* Month navigation */}
+            <div className="flex items-center justify-between mb-5">
+              <button
+                onClick={() => setMiniCalMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))}
+                className="flex items-center justify-center w-9 h-9 rounded-full border-none cursor-pointer transition-colors duration-100"
+                style={{ background: 'none', color: 'var(--text-dim)', fontSize: 22 }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface2)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+              >
+                &#8249;
+              </button>
+              <span className="font-bold text-[17px]" style={{ color: 'var(--text)' }}>
+                {MONTH_NAMES[miniCalMonth.getMonth()]} {miniCalMonth.getFullYear()}
               </span>
-            )}
+              <button
+                onClick={() => setMiniCalMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))}
+                className="flex items-center justify-center w-9 h-9 rounded-full border-none cursor-pointer transition-colors duration-100"
+                style={{ background: 'none', color: 'var(--text-dim)', fontSize: 22 }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface2)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+              >
+                &#8250;
+              </button>
+            </div>
+
+            {/* Day-of-week headers */}
+            <div className="grid grid-cols-7 mb-1">
+              {DAY_ABBR.map(d => (
+                <div
+                  key={d}
+                  className="text-center text-[11px] font-semibold uppercase py-1.5"
+                  style={{ color: 'var(--text-faint)' }}
+                >
+                  {d}
+                </div>
+              ))}
+            </div>
+
+            {/* Calendar grid */}
+            <div className="grid grid-cols-7 gap-0.5">
+              {calDays.map((day, i) => {
+                if (!day) return <div key={`empty-${i}`} />
+                const isToday = sameDay(day, today)
+                const isSelected = sameDay(day, currentDate)
+                return (
+                  <button
+                    key={day.toISOString()}
+                    onClick={() => onSelectDate(new Date(day.getFullYear(), day.getMonth(), day.getDate()))}
+                    className="w-full aspect-square flex items-center justify-center rounded-full text-[14px] cursor-pointer border-none transition-all duration-100"
+                    style={{
+                      background: isToday
+                        ? 'var(--accent)'
+                        : isSelected
+                        ? 'var(--accent-glow)'
+                        : 'transparent',
+                      color: isToday ? '#fff' : isSelected ? 'var(--accent)' : 'var(--text)',
+                      fontWeight: isToday || isSelected ? 700 : 400,
+                      outline: isSelected && !isToday ? '2px solid var(--accent)' : 'none',
+                      outlineOffset: -1,
+                    }}
+                    onMouseEnter={e => {
+                      if (!isToday && !isSelected) e.currentTarget.style.background = 'var(--surface2)'
+                    }}
+                    onMouseLeave={e => {
+                      if (!isToday && !isSelected) e.currentTarget.style.background = 'transparent'
+                    }}
+                  >
+                    {day.getDate()}
+                  </button>
+                )
+              })}
+            </div>
+
           </div>
         </div>
-      )}
+      </div>
 
-      {allDayEvents.length > 0 && (
+      {/* RIGHT: Event list */}
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--surface)' }}>
+
+        {/* Day header */}
         <div
-          className="flex-shrink-0 px-6 py-2 flex flex-wrap gap-2"
-          style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
+          className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+          style={{ borderBottom: '1px solid var(--border)' }}
         >
-          <span className="font-mono text-[11px] self-center mr-1" style={{ color: 'var(--text-faint)' }}>
-            all day
-          </span>
-          {allDayEvents.map(ev => (
-            <button
-              key={ev.id}
-              onClick={() => onEventClick(ev)}
-              className="text-[12px] px-2.5 py-1 rounded-md font-medium border-none cursor-pointer transition-all duration-100"
-              style={{ background: hexToRgba(ev.color, 0.25), color: ev.color }}
-              onMouseEnter={e => (e.currentTarget.style.filter = 'brightness(1.15)')}
-              onMouseLeave={e => (e.currentTarget.style.filter = '')}
-            >
-              {ev.title}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div
-        ref={bodyRef}
-        className="flex-1 overflow-y-auto"
-        style={{ display: 'grid', gridTemplateColumns: '70px 1fr' }}
-      >
-        {/* Time labels */}
-        <div className="flex flex-col">
-          {HOURS.map(h => (
-            <div
-              key={h}
-              className="font-mono text-[12px] text-right pr-3 flex-shrink-0"
-              style={{
-                height: HOUR_HEIGHT,
-                color: 'var(--text-faint)',
-                transform: 'translateY(-7px)',
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'flex-end',
-              }}
-            >
-              {h === 0 ? '' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`}
+          <div>
+            <div className="font-bold text-[22px]" style={{ color: 'var(--text)' }}>
+              {label}
             </div>
-          ))}
+            <div className="text-[13px] mt-0.5" style={{ color: 'var(--text-dim)' }}>
+              {dayEvents.length === 0
+                ? 'Nothing scheduled'
+                : `${dayEvents.length} event${dayEvents.length !== 1 ? 's' : ''}`}
+            </div>
+          </div>
+          {onAddEvent && (
+            <button
+              onClick={() => onAddEvent(currentDate)}
+              className="flex items-center gap-1 rounded-[9px] text-sm font-semibold text-white border-none cursor-pointer transition-all duration-150"
+              style={{
+                padding: '8px 16px',
+                background: 'var(--accent)',
+                boxShadow: '0 4px 14px rgba(108,140,255,0.3)',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = '' }}
+            >
+              + Add Event
+            </button>
+          )}
         </div>
 
-        {/* Events column */}
+        {/* Events scroll area */}
         <div
-          ref={columnRef}
-          className="relative select-none"
-          style={{ borderLeft: '1px solid var(--border)', cursor: 'crosshair' }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseLeave}
+          className="flex-1 overflow-y-auto"
+          style={{ padding: '16px 20px 32px', touchAction: 'pan-y' }}
         >
-          {HOURS.map(h => (
-            <div key={h} style={{ height: HOUR_HEIGHT, borderBottom: '1px solid var(--border)' }} />
-          ))}
-
-          {/* Drag-to-create preview */}
-          {dragStart !== null && dragEnd !== null && previewHeight > 0 && (
+          {dayEvents.length === 0 ? (
             <div
-              className="absolute left-1 right-4 rounded-lg pointer-events-none"
-              style={{
-                top: previewTop,
-                height: previewHeight,
-                background: 'rgba(108,140,255,0.15)',
-                border: '2px dashed var(--accent)',
-                zIndex: 5,
-              }}
-            />
-          )}
-
-          {computeColumnLayout(timedEvents).map(({ ev, col, totalCols }) => {
-            const startMin = ev.start.getHours() * 60 + ev.start.getMinutes()
-            const endMin = ev.end.getHours() * 60 + ev.end.getMinutes()
-            const top = (startMin / 60) * HOUR_HEIGHT
-            const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 24)
-            const isBeingRescheduled = reschedView?.event.id === ev.id
-            const leftPct = (col / totalCols) * 100
-            const rightPct = ((totalCols - col - 1) / totalCols) * 100
-
-            return (
-              <button
-                key={ev.id}
-                data-event-id={ev.id}
-                onClick={() => {
-                  if (suppressClickRef.current === ev.id) {
-                    suppressClickRef.current = null
-                    return
-                  }
-                  onEventClick(ev)
-                }}
-                onMouseDown={e => handleEventMouseDown(e, ev)}
-                className="absolute rounded-lg px-3 py-2 text-[13px] font-medium text-left border-none transition-all duration-100"
-                style={{
-                  top,
-                  height,
-                  left: `calc(${leftPct}% + 1px)`,
-                  right: `calc(${rightPct}% + ${col === totalCols - 1 ? 4 : 1}px)`,
-                  background: hexToRgba(ev.color, isBeingRescheduled ? 0.07 : 0.15),
-                  color: ev.color,
-                  borderLeft: `4px solid ${ev.color}`,
-                  opacity: isBeingRescheduled ? 0.4 : 1,
-                  zIndex: 2,
-                  cursor: onReschedule && (ev.provider === 'google' || ev.provider === 'outlook') && ev.calendarType !== 'work' ? 'grab' : 'pointer',
-                }}
-                onMouseEnter={e => { if (!isBeingRescheduled) e.currentTarget.style.filter = 'brightness(1.15)' }}
-                onMouseLeave={e => { e.currentTarget.style.filter = '' }}
-              >
-                <div className="font-semibold truncate">{ev.title}</div>
-              </button>
-            )
-          })}
-
-          {/* Reschedule ghost */}
-          {reschedView && (() => {
-            const ghostHeight = Math.max(
-              (reschedView.event.end.getTime() - reschedView.event.start.getTime()) / 60000 / 60 * HOUR_HEIGHT,
-              24
-            )
-            return (
-              <div
-                className="absolute left-1 right-4 rounded-lg px-3 py-2 text-[13px] font-medium pointer-events-none"
-                style={{
-                  top: (reschedView.topMin / 60) * HOUR_HEIGHT,
-                  height: ghostHeight,
-                  background: hexToRgba(reschedView.event.color, 0.3),
-                  color: reschedView.event.color,
-                  border: `2px dashed ${reschedView.event.color}`,
-                  zIndex: 10,
-                }}
-              >
-                <div className="font-semibold truncate">{reschedView.event.title}</div>
-              </div>
-            )
-          })()}
-
-          {isToday && (
-            <div className="now-line" style={{ top: (nowMinutes / 60) * HOUR_HEIGHT }} />
+              className="flex flex-col items-center justify-center h-full gap-4"
+              style={{ color: 'var(--text-faint)' }}
+            >
+              <span style={{ fontSize: 52, lineHeight: 1 }}>&#128197;</span>
+              <span className="text-[15px]">Nothing scheduled</span>
+              {onAddEvent && (
+                <button
+                  onClick={() => onAddEvent(currentDate)}
+                  className="text-[13px] font-semibold border-none cursor-pointer px-5 py-2.5 rounded-[9px] transition-all duration-150"
+                  style={{ color: 'var(--accent)', background: 'var(--accent-glow)' }}
+                  onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.1)' }}
+                  onMouseLeave={e => { e.currentTarget.style.filter = '' }}
+                >
+                  + Add Event
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              {dayEvents.map(ev => (
+                <button
+                  key={ev.id}
+                  onClick={() => onEventClick(ev)}
+                  className="flex items-center gap-4 w-full text-left rounded-2xl px-5 py-4 border-none cursor-pointer transition-all duration-100"
+                  style={{
+                    background: hexToRgba(ev.color, 0.1),
+                    borderLeft: `4px solid ${ev.color}`,
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.1)' }}
+                  onMouseLeave={e => { e.currentTarget.style.filter = '' }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-[15px] truncate" style={{ color: 'var(--text)' }}>
+                      {ev.title}
+                    </div>
+                    {ev.location && (
+                      <div className="text-[12px] mt-0.5 truncate" style={{ color: 'var(--text-dim)' }}>
+                        &#128205; {ev.location}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className="text-[13px] font-semibold" style={{ color: ev.color }}>
+                      {ev.allDay
+                        ? 'All day'
+                        : `${formatTime(ev.start)} – ${formatTime(ev.end)}`}
+                    </span>
+                    <span
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: '50%',
+                        background: ev.color,
+                        flexShrink: 0,
+                        display: 'inline-block',
+                      }}
+                    />
+                  </div>
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </div>

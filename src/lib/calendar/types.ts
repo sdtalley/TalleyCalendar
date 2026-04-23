@@ -214,7 +214,7 @@ export interface FamilyMemberUI extends FamilyMember {
   enabled: boolean
 }
 
-export type CalendarView = 'month' | 'week' | 'day'
+export type CalendarView = 'month' | 'schedule' | 'day'
 
 export interface NewEventDraft {
   title: string

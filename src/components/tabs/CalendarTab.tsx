@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { InfoBar } from '@/components/layout/InfoBar'
 import { MonthView } from '@/components/calendar/MonthView'
 import { WeekView } from '@/components/calendar/WeekView'
-import { AgendaView } from '@/components/calendar/AgendaView'
+import { DayView } from '@/components/calendar/DayView'
 import { EventModal } from '@/components/calendar/EventModal'
 import { EventDetailModal } from '@/components/calendar/EventDetailModal'
 import { MobileDayDrawer } from '@/components/calendar/MobileDayDrawer'
@@ -28,13 +28,6 @@ function getMemberAvatarContent(member: FamilyMember): string {
   return getMemberInitials(member.name)
 }
 
-function formatAgendaRange(startDate: Date): string {
-  const end = new Date(startDate)
-  end.setDate(end.getDate() + 13)
-  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  return `${fmt(startDate)} – ${fmt(end)}`
-}
-
 function formatScheduleRange(currentDate: Date, numDays: number): string {
   const dates = getWeekDates(currentDate).slice(0, numDays)
   const first = dates[0]
@@ -47,8 +40,8 @@ function formatScheduleRange(currentDate: Date, numDays: number): string {
 
 const VIEWS: { id: CalendarView; label: string }[] = [
   { id: 'month', label: 'Month' },
-  { id: 'week', label: 'Schedule' },
-  { id: 'day', label: 'Agenda' },
+  { id: 'schedule', label: 'Schedule' },
+  { id: 'day', label: 'Day' },
 ]
 
 // ── CalendarTab ────────────────────────────────────────────────────────────
@@ -129,7 +122,7 @@ export function CalendarTab() {
         case 't': case 'T': goToday(); break
         case 'n': case 'N': setModalOpen(true); break
         case 'm': changeView('month'); break
-        case 'w': changeView('week'); break
+        case 'w': changeView('schedule'); break
         case 'd': changeView('day'); break
         case '/': {
           e.preventDefault()
@@ -325,9 +318,9 @@ export function CalendarTab() {
   // ── Date label ─────────────────────────────────────────────────────────────
 
   const dateLabel =
-    view === 'day'   ? formatAgendaRange(currentDate) :
-    view === 'week'  ? formatScheduleRange(currentDate, scheduleDays) :
-                       formatMonthYear(currentDate)
+    view === 'day'      ? currentDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) :
+    view === 'schedule' ? formatScheduleRange(currentDate, scheduleDays) :
+                          formatMonthYear(currentDate)
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -336,7 +329,7 @@ export function CalendarTab() {
   const calendarRightSlot = (
     <>
       <ViewDropdown views={VIEWS} view={view} onViewChange={changeView} />
-      {view === 'week' && (
+      {view === 'schedule' && (
         <DayCountPicker value={scheduleDays} onChange={setScheduleDays} />
       )}
       {calTypes.length > 0 && (
@@ -502,7 +495,7 @@ export function CalendarTab() {
               onMonthReschedule={handleMonthReschedule}
             />
           )}
-          {view === 'week' && (
+          {view === 'schedule' && (
             <WeekView
               currentDate={currentDate}
               events={displayEvents}
@@ -512,10 +505,12 @@ export function CalendarTab() {
             />
           )}
           {view === 'day' && (
-            <AgendaView
+            <DayView
               currentDate={currentDate}
               events={displayEvents}
               onEventClick={ev => setDetailEvent(ev)}
+              onSelectDate={selectDate}
+              onAddEvent={handleAddEventOnDate}
             />
           )}
         </div>
