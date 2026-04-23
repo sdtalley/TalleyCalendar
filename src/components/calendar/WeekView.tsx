@@ -21,6 +21,7 @@ interface WeekViewProps {
   events: CalendarEvent[]
   onEventClick: (event: CalendarEvent) => void
   onReschedule?: (event: CalendarEvent, newDate: Date, newStartMinutes: number) => void
+  numDays?: number
 }
 
 // ── DraggableEventBlock ────────────────────────────────────────────────────
@@ -182,9 +183,9 @@ function DraggableEventBlock({
 
 // ── WeekView ───────────────────────────────────────────────────────────────
 
-export function WeekView({ currentDate, events, onEventClick, onReschedule }: WeekViewProps) {
+export function WeekView({ currentDate, events, onEventClick, onReschedule, numDays = 7 }: WeekViewProps) {
   const today = new Date()
-  const weekDates = getWeekDates(currentDate)
+  const weekDates = getWeekDates(currentDate).slice(0, numDays)
   const bodyRef = useRef<HTMLDivElement>(null)
   const columnRefs = useRef<(HTMLDivElement | null)[]>([])
 
@@ -201,7 +202,7 @@ export function WeekView({ currentDate, events, onEventClick, onReschedule }: We
 
   useEffect(() => {
     const start = toDateKey(weekDates[0])
-    const end = toDateKey(weekDates[6])
+    const end = toDateKey(weekDates[weekDates.length - 1])
     fetch(`/api/meals?start=${start}&end=${end}`)
       .then(r => r.json())
       .then(data => setMeals(data))
@@ -218,12 +219,12 @@ export function WeekView({ currentDate, events, onEventClick, onReschedule }: We
   )
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header row */}
       <div
         className="flex-shrink-0 grid"
         style={{
-          gridTemplateColumns: `60px repeat(7, 1fr)`,
+          gridTemplateColumns: `60px repeat(${numDays}, 1fr)`,
           borderBottom: '1px solid var(--border)',
           background: 'var(--surface)',
         }}
@@ -252,7 +253,7 @@ export function WeekView({ currentDate, events, onEventClick, onReschedule }: We
         <div
           className="flex-shrink-0 grid"
           style={{
-            gridTemplateColumns: `60px repeat(7, 1fr)`,
+            gridTemplateColumns: `60px repeat(${numDays}, 1fr)`,
             borderBottom: '1px solid var(--border)',
             background: 'var(--surface)',
           }}
@@ -293,7 +294,7 @@ export function WeekView({ currentDate, events, onEventClick, onReschedule }: We
       <div
         className="flex-shrink-0 grid"
         style={{
-          gridTemplateColumns: `60px repeat(7, 1fr)`,
+          gridTemplateColumns: `60px repeat(${numDays}, 1fr)`,
           borderBottom: '1px solid var(--border)',
           background: 'var(--surface)',
         }}
@@ -334,7 +335,7 @@ export function WeekView({ currentDate, events, onEventClick, onReschedule }: We
       <div
         ref={bodyRef}
         className="flex-1 overflow-y-auto relative"
-        style={{ display: 'grid', gridTemplateColumns: `60px repeat(7, 1fr)` }}
+        style={{ display: 'grid', gridTemplateColumns: `60px repeat(${numDays}, 1fr)`, touchAction: 'pan-y' }}
       >
         {/* Time labels */}
         <div className="flex flex-col">

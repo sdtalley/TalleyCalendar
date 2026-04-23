@@ -85,7 +85,7 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 
 | Tab | Content | Status |
 |---|---|---|
-| **Calendar** | Month / Week / Day + own sub-nav | ✅ Live |
+| **Calendar** | Month / Schedule (1–7 days) / Agenda + own sub-nav | ✅ Live |
 | **Tasks** | Chores + Routines | Phase 3B |
 | **Rewards** | Stars + Reward redemption | Phase 3B |
 | **Meals** | Meal planner + Recipe Box | Phase 3C |
@@ -96,7 +96,7 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 ### Layout rules
 - **AppShell** owns: NavSidebar + TopBar + tab switcher + `useScreenDim`. No business logic.
 - **TopBar**: global info bar only — clock, date, weather. No calendar-specific controls.
-- **CalendarTab**: owns all calendar logic + its own sub-nav (Month/Week/Day toggle, prev/next/today, members dropdown, filters, search, add event).
+- **CalendarTab**: owns all calendar logic + its own sub-nav — one unified bar containing: view dropdown (Month/Schedule/Agenda), day-count picker (Schedule: 1–7 days), prev/next/today, scrollable member chips, filters dropdown, search, add event. Profile chips merged into sub-nav (no separate chips strip). Touch swipe left/right navigates dates on all views.
 - **NavSidebar**: CSS flex `order` trick — `order-first` landscape, `order-last` portrait. No `fixed` positioning.
 - `/settings` route kept separate (OAuth callbacks redirect there); Settings item is a `<Link>`.
 

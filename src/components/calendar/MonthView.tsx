@@ -140,7 +140,7 @@ export function MonthView({
   }
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Weekday header */}
       <div
         className="grid grid-cols-7 flex-shrink-0"

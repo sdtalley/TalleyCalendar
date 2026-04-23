@@ -43,7 +43,7 @@ export function AgendaView({ currentDate, events, onEventClick }: AgendaViewProp
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" style={{ padding: '8px 16px 24px' }}>
+    <div className="h-full overflow-y-auto" style={{ padding: '8px 16px 24px', touchAction: 'pan-y' }}>
       <div className="max-w-2xl mx-auto">
         {days.map((date, i) => {
           const isToday = sameDay(date, today)

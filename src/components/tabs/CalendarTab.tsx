@@ -11,7 +11,7 @@ import { useCalendarNavigation } from '@/hooks/useCalendarNavigation'
 import { useEventFilters } from '@/hooks/useEventFilters'
 import { useCalendarEvents } from '@/hooks/useCalendarEvents'
 import { generateSampleEvents, DEFAULT_FAMILY_MEMBERS } from '@/lib/sampleData'
-import { formatMonthYear } from '@/lib/utils'
+import { formatMonthYear, getWeekDates } from '@/lib/utils'
 import type { CalendarEvent, FamilyMember, FamilyMemberUI, NewEventDraft, CalendarView } from '@/lib/calendar/types'
 
 function getMemberInitials(name: string): string {
@@ -34,17 +34,28 @@ function formatAgendaRange(startDate: Date): string {
   return `${fmt(startDate)} – ${fmt(end)}`
 }
 
+function formatScheduleRange(currentDate: Date, numDays: number): string {
+  const dates = getWeekDates(currentDate).slice(0, numDays)
+  const first = dates[0]
+  const last = dates[dates.length - 1]
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  if (numDays === 1) return first.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  if (first.getMonth() === last.getMonth()) return `${fmt(first)} – ${last.getDate()}`
+  return `${fmt(first)} – ${fmt(last)}`
+}
+
 const VIEWS: { id: CalendarView; label: string }[] = [
   { id: 'month', label: 'Month' },
-  { id: 'week', label: 'Week' },
-  { id: 'day', label: 'Day' },
+  { id: 'week', label: 'Schedule' },
+  { id: 'day', label: 'Agenda' },
 ]
 
 // ── CalendarTab ────────────────────────────────────────────────────────────
 
 export function CalendarTab() {
+  const [scheduleDays, setScheduleDays] = useState(7)
   const { currentDate, selectedDate, view, goToday, goPrev, goNext, selectDate, changeView } =
-    useCalendarNavigation()
+    useCalendarNavigation(scheduleDays)
 
   const { events: liveEvents, members: liveMembers, loading, backgroundLoading, error: calError } =
     useCalendarEvents(currentDate)
@@ -78,6 +89,8 @@ export function CalendarTab() {
   const [searchQuery, setSearchQuery] = useState('')
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const touchStartX = useRef<number>(0)
+  const touchStartY = useRef<number>(0)
 
   const visibleWithOverrides = visibleEvents
     .filter(e => !deletedIds.has(e.id))
@@ -295,64 +308,118 @@ export function CalendarTab() {
   const anyFilterOff =
     familyMembers.some(m => !m.enabled) || calTypes.some(ct => !ct.enabled)
 
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+  }
+
+  function handleTouchEnd(e: React.TouchEvent) {
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    const dy = Math.abs(e.changedTouches[0].clientY - touchStartY.current)
+    if (Math.abs(dx) > 60 && Math.abs(dx) > dy * 1.5) {
+      dx < 0 ? goNext() : goPrev()
+    }
+  }
+
+  // ── Date label ─────────────────────────────────────────────────────────────
+
+  const dateLabel =
+    view === 'day'   ? formatAgendaRange(currentDate) :
+    view === 'week'  ? formatScheduleRange(currentDate, scheduleDays) :
+                       formatMonthYear(currentDate)
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Sub-nav bar */}
+      {/* Single toolbar bar */}
       <div
         className="flex-shrink-0"
         style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
       >
-        {/* Desktop sub-nav */}
-        <div className="hidden md:flex items-center gap-2 px-4 py-2">
-          <ViewToggle views={VIEWS} view={view} onViewChange={changeView} />
-
-          <div className="flex items-center gap-1">
-            <NavButton onClick={goPrev} label="‹" />
-            <span
-              className="text-[17px] font-semibold text-center select-none"
-              style={{ minWidth: 170, color: 'var(--text)' }}
-            >
-              {view === 'day' ? formatAgendaRange(currentDate) : formatMonthYear(currentDate)}
-            </span>
-            <NavButton onClick={goNext} label="›" />
-          </div>
-
-          <TodayButton onClick={goToday} />
-          <div className="flex-1" />
-
-          {familyMembers.length > 0 && (
-            <MembersDropdown familyMembers={familyMembers} onToggleMember={toggleMember} />
+        {/* Desktop — one unified row: view | nav | chips | controls */}
+        <div className="hidden md:flex items-center gap-2 px-3 py-1.5">
+          {/* View dropdown + day count */}
+          <ViewDropdown views={VIEWS} view={view} onViewChange={changeView} />
+          {view === 'week' && (
+            <DayCountPicker value={scheduleDays} onChange={setScheduleDays} />
           )}
+
+          {/* Navigation */}
+          <NavButton onClick={goPrev} label="‹" />
+          <span
+            className="text-[14px] font-semibold text-center select-none whitespace-nowrap"
+            style={{ minWidth: 130, color: 'var(--text)' }}
+          >
+            {dateLabel}
+          </span>
+          <NavButton onClick={goNext} label="›" />
+          <TodayButton onClick={goToday} />
+
+          {/* Profile chips — flex-1 scrollable middle section */}
+          {hasRealSetup && familyMembers.length > 0 ? (
+            <div className="flex-1 overflow-x-auto flex items-center gap-1.5 mx-1 min-w-0" style={{ scrollbarWidth: 'none' }}>
+              {familyMembers.map(m => {
+                const avatarContent = getMemberAvatarContent(m)
+                const isEmoji = m.avatar?.type === 'emoji'
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => toggleMember(m.id)}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-full whitespace-nowrap border-none cursor-pointer transition-all duration-150 flex-shrink-0"
+                    style={{
+                      background: m.enabled ? `${m.color}22` : 'var(--surface2)',
+                      border: `1px solid ${m.enabled ? m.color + '55' : 'var(--border)'}`,
+                      opacity: m.enabled ? 1 : 0.5,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 18, height: 18, borderRadius: '50%', background: m.color, color: '#fff',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: isEmoji ? 10 : 8, fontWeight: 700, flexShrink: 0, lineHeight: 1,
+                      }}
+                    >
+                      {avatarContent}
+                    </span>
+                    <span className="text-[11px] font-medium" style={{ color: m.enabled ? 'var(--text)' : 'var(--text-dim)' }}>
+                      {m.name}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="flex-1" />
+          )}
+
+          {/* Right controls */}
           {calTypes.length > 0 && (
             <FiltersDropdown calTypes={calTypes} onToggleCalType={toggleCalType} />
           )}
-
           <input
             data-search-input
             type="text"
             placeholder="Search"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="text-[13px] px-3 py-[6px] rounded-[8px] transition-all duration-200"
+            className="text-[12px] px-2.5 py-1.5 rounded-[7px] transition-all duration-200"
             style={{
               background: 'var(--surface2)',
               border: '1px solid var(--border)',
               color: 'var(--text)',
               outline: 'none',
-              width: 140,
+              width: 110,
             }}
             onFocus={e => {
               e.currentTarget.style.borderColor = 'var(--accent)'
-              e.currentTarget.style.width = '190px'
+              e.currentTarget.style.width = '160px'
             }}
             onBlur={e => {
               e.currentTarget.style.borderColor = 'var(--border)'
-              e.currentTarget.style.width = '140px'
+              e.currentTarget.style.width = '110px'
             }}
           />
-
           <AddEventButton onClick={handleAddEvent} />
         </div>
 
@@ -361,21 +428,20 @@ export function CalendarTab() {
           <div className="flex items-center gap-1">
             <NavButton onClick={goPrev} label="‹" />
             <span
-              className="text-[14px] font-semibold text-center select-none"
-              style={{ minWidth: 120, color: 'var(--text)' }}
+              className="text-[13px] font-semibold text-center select-none"
+              style={{ minWidth: 110, color: 'var(--text)' }}
             >
-              {view === 'day' ? formatAgendaRange(currentDate) : formatMonthYear(currentDate)}
+              {dateLabel}
             </span>
             <NavButton onClick={goNext} label="›" />
           </div>
-
           <div className="flex items-center gap-1.5">
             <TodayButton onClick={goToday} />
-            <ViewToggle views={VIEWS} view={view} onViewChange={changeView} />
+            <ViewDropdown views={VIEWS} view={view} onViewChange={changeView} compact />
             {familyMembers.length > 0 && (
               <button
                 onClick={() => setMobileFiltersOpen(true)}
-                className="w-9 h-9 flex items-center justify-center rounded-[8px] text-sm cursor-pointer transition-all duration-150 relative border-none"
+                className="w-8 h-8 flex items-center justify-center rounded-[7px] text-sm cursor-pointer transition-all duration-150 border-none"
                 style={{
                   background: anyFilterOff ? 'var(--accent-glow)' : 'var(--surface2)',
                   border: `1px solid ${anyFilterOff ? 'var(--accent)' : 'var(--border)'}`,
@@ -389,55 +455,6 @@ export function CalendarTab() {
           </div>
         </div>
       </div>
-
-      {/* Profile chips strip — desktop only, real members only */}
-      {hasRealSetup && familyMembers.length > 0 && (
-        <div
-          className="hidden md:flex flex-shrink-0 items-center gap-2 px-4 py-1.5 overflow-x-auto"
-          style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
-        >
-          {familyMembers.map(m => {
-            const avatarContent = getMemberAvatarContent(m)
-            const isEmoji = m.avatar?.type === 'emoji'
-            return (
-              <button
-                key={m.id}
-                onClick={() => toggleMember(m.id)}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full whitespace-nowrap border-none cursor-pointer transition-all duration-150 flex-shrink-0"
-                style={{
-                  background: m.enabled ? `${m.color}22` : 'var(--surface2)',
-                  border: `1px solid ${m.enabled ? m.color + '55' : 'var(--border)'}`,
-                  opacity: m.enabled ? 1 : 0.5,
-                }}
-              >
-                <span
-                  style={{
-                    width: 22, height: 22,
-                    borderRadius: '50%',
-                    background: m.color,
-                    color: '#fff',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: isEmoji ? 12 : 9,
-                    fontWeight: 700,
-                    flexShrink: 0,
-                    lineHeight: 1,
-                  }}
-                >
-                  {avatarContent}
-                </span>
-                <span
-                  className="text-[12px] font-medium"
-                  style={{ color: m.enabled ? 'var(--text)' : 'var(--text-dim)' }}
-                >
-                  {m.name}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      )}
 
       {/* Error banners */}
       {calError && (
@@ -463,7 +480,11 @@ export function CalendarTab() {
           Loading calendar...
         </div>
       ) : (
-        <div className="flex-1 overflow-hidden relative">
+        <div
+          className="flex-1 flex flex-col overflow-hidden relative"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           {backgroundLoading && <div className="calendar-shimmer" />}
           {view === 'month' && (
             <MonthView
@@ -482,6 +503,7 @@ export function CalendarTab() {
               events={displayEvents}
               onEventClick={ev => setDetailEvent(ev)}
               onReschedule={handleRescheduleEvent}
+              numDays={scheduleDays}
             />
           )}
           {view === 'day' && (
@@ -572,33 +594,150 @@ function TodayButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-function ViewToggle({
+function ViewDropdown({
   views,
   view,
   onViewChange,
+  compact,
 }: {
   views: { id: CalendarView; label: string }[]
   view: CalendarView
   onViewChange: (v: CalendarView) => void
+  compact?: boolean
 }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const current = views.find(v => v.id === view) ?? views[0]
+
+  useEffect(() => {
+    if (!open) return
+    function h(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
   return (
-    <div
-      className="flex rounded-[8px] overflow-hidden"
-      style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}
-    >
-      {views.map(v => (
-        <button
-          key={v.id}
-          onClick={() => onViewChange(v.id)}
-          className="px-[12px] py-[6px] text-[12px] font-medium border-none cursor-pointer transition-all duration-150"
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1 rounded-[7px] text-[12px] font-semibold cursor-pointer transition-all duration-150 border-none whitespace-nowrap"
+        style={{
+          padding: compact ? '5px 8px' : '5px 10px',
+          background: open ? 'var(--accent)' : 'var(--surface2)',
+          border: `1px solid ${open ? 'var(--accent)' : 'var(--border)'}`,
+          color: open ? '#fff' : 'var(--text)',
+        }}
+      >
+        {current.label}
+        <span style={{ fontSize: 9, opacity: 0.7 }}>▾</span>
+      </button>
+      {open && (
+        <div
           style={{
-            background: view === v.id ? 'var(--accent)' : 'transparent',
-            color: view === v.id ? '#fff' : 'var(--text-dim)',
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            left: 0,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+            minWidth: 120,
+            zIndex: 50,
+            overflow: 'hidden',
           }}
         >
-          {v.label}
-        </button>
-      ))}
+          {views.map(v => (
+            <button
+              key={v.id}
+              onClick={() => { onViewChange(v.id); setOpen(false) }}
+              className="flex items-center justify-between w-full text-left cursor-pointer transition-colors duration-100 border-none"
+              style={{
+                padding: '8px 12px',
+                background: view === v.id ? 'var(--accent-glow)' : 'transparent',
+                color: view === v.id ? 'var(--accent)' : 'var(--text)',
+                fontSize: 13,
+                fontWeight: view === v.id ? 600 : 400,
+              }}
+              onMouseEnter={e => { if (view !== v.id) e.currentTarget.style.background = 'var(--surface2)' }}
+              onMouseLeave={e => { if (view !== v.id) e.currentTarget.style.background = 'transparent' }}
+            >
+              {v.label}
+              {view === v.id && <span style={{ fontSize: 11 }}>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DayCountPicker({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const options = [1, 2, 3, 4, 5, 7]
+
+  useEffect(() => {
+    if (!open) return
+    function h(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-0.5 rounded-[7px] text-[11px] font-medium cursor-pointer transition-all duration-150 border-none whitespace-nowrap"
+        style={{
+          padding: '5px 7px',
+          background: 'var(--surface2)',
+          border: '1px solid var(--border)',
+          color: 'var(--text-dim)',
+        }}
+      >
+        {value}d
+        <span style={{ fontSize: 9, opacity: 0.7 }}>▾</span>
+      </button>
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            left: 0,
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+            minWidth: 80,
+            zIndex: 50,
+            overflow: 'hidden',
+          }}
+        >
+          {options.map(n => (
+            <button
+              key={n}
+              onClick={() => { onChange(n); setOpen(false) }}
+              className="flex items-center justify-between w-full text-left cursor-pointer transition-colors duration-100 border-none"
+              style={{
+                padding: '7px 12px',
+                background: value === n ? 'var(--accent-glow)' : 'transparent',
+                color: value === n ? 'var(--accent)' : 'var(--text)',
+                fontSize: 13,
+                fontWeight: value === n ? 600 : 400,
+              }}
+              onMouseEnter={e => { if (value !== n) e.currentTarget.style.background = 'var(--surface2)' }}
+              onMouseLeave={e => { if (value !== n) e.currentTarget.style.background = 'transparent' }}
+            >
+              {n} day{n !== 1 ? 's' : ''}
+              {value === n && <span style={{ fontSize: 11 }}>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
