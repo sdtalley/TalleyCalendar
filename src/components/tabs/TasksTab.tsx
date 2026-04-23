@@ -6,6 +6,7 @@ import type {
   Routine, RoutineCompletion, RoutineTimeBlock,
   FamilyMember, SessionPayload,
 } from '@/lib/calendar/types'
+import { InfoBar } from '@/components/layout/InfoBar'
 import { ChoreCard } from '@/components/tasks/ChoreCard'
 import { ChoreForm, type ChoreFormData } from '@/components/tasks/ChoreForm'
 import { RoutineCard } from '@/components/tasks/RoutineCard'
@@ -222,11 +223,32 @@ export function TasksTab() {
 
   // ── Render ──────────────────────────────────────────────────────────────
 
+  // Tasks Day/Week toggle for InfoBar right slot (placeholder — full redesign with Feature 7)
+  const tasksRightSlot = (
+    <>
+      <button
+        className="flex items-center gap-1 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold border-none cursor-pointer"
+        style={{ background: 'var(--accent)', color: '#fff' }}
+      >
+        ○ Day
+      </button>
+      <button
+        className="flex items-center gap-1 px-3 py-1.5 rounded-[8px] text-[12px] font-medium border-none cursor-pointer"
+        style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}
+      >
+        □ Week
+      </button>
+    </>
+  )
+
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden',
       background: 'var(--bg)',
     }}>
+      {/* InfoBar — shared date/time/weather + tasks-specific controls */}
+      <InfoBar rightSlot={tasksRightSlot} />
+
       {/* Sub-nav: Chores | Routines */}
       <div style={{
         display: 'flex', gap: 0, borderBottom: '1px solid var(--border)',

@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { NavSidebar, type TabId } from './NavSidebar'
-import { TopBar } from './TopBar'
 import { CalendarTab } from '@/components/tabs/CalendarTab'
 import { TasksTab } from '@/components/tabs/TasksTab'
 import { RewardsTab } from '@/components/tabs/RewardsTab'
@@ -17,12 +16,12 @@ export function AppShell() {
   const [activeTab, setActiveTab] = useState<TabId>('calendar')
 
   return (
-    // Mobile (flex-col): TopBar + content on top, NavSidebar on bottom (order-last)
+    // Mobile (flex-col): content on top, NavSidebar on bottom (order-last)
     // Desktop (md:flex-row): NavSidebar on left (order-first), rest on right
+    // Each tab renders its own InfoBar — no global TopBar needed
     <div className="flex flex-col md:flex-row h-screen overflow-hidden">
       {/* Main area — flex-1 fills all remaining space */}
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-        <TopBar />
         <div className="flex-1 overflow-hidden">
           {activeTab === 'calendar' && <CalendarTab />}
           {activeTab === 'tasks'    && <TasksTab />}

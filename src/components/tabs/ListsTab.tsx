@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { AppList, ListItem, ListType } from '@/lib/calendar/types'
+import { InfoBar } from '@/components/layout/InfoBar'
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -606,25 +607,18 @@ export function ListsTab() {
       display: 'flex', flexDirection: 'column', height: '100%',
       background: 'var(--bg)', overflow: 'hidden',
     }}>
-      {/* Header */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '14px 16px', borderBottom: '1px solid var(--border)',
-        background: 'var(--surface)', flexShrink: 0,
-      }}>
-        <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>Lists</span>
-        <button
-          type="button"
-          onClick={() => { setEditList(null); setShowForm(true) }}
-          style={{
-            padding: '8px 16px', borderRadius: 10,
-            background: 'var(--accent)', border: 'none',
-            color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-          }}
-        >
-          + New List
-        </button>
-      </div>
+      <InfoBar
+        rightSlot={
+          <button
+            type="button"
+            onClick={() => { setEditList(null); setShowForm(true) }}
+            className="flex items-center gap-1 rounded-[8px] text-sm font-semibold text-white border-none cursor-pointer"
+            style={{ padding: '6px 14px', background: 'var(--accent)' }}
+          >
+            + New List
+          </button>
+        }
+      />
 
       {/* Grid */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>

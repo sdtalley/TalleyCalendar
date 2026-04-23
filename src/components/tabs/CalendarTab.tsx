@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { InfoBar } from '@/components/layout/InfoBar'
 import { MonthView } from '@/components/calendar/MonthView'
 import { WeekView } from '@/components/calendar/WeekView'
 import { AgendaView } from '@/components/calendar/AgendaView'
@@ -330,131 +331,135 @@ export function CalendarTab() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  // ── InfoBar right slot (desktop calendar controls) ─────────────────────────
+
+  const calendarRightSlot = (
+    <>
+      <ViewDropdown views={VIEWS} view={view} onViewChange={changeView} />
+      {view === 'week' && (
+        <DayCountPicker value={scheduleDays} onChange={setScheduleDays} />
+      )}
+      {calTypes.length > 0 && (
+        <FiltersDropdown calTypes={calTypes} onToggleCalType={toggleCalType} />
+      )}
+      <NavButton onClick={goPrev} label="‹" />
+      <span
+        className="text-[13px] font-semibold text-center select-none whitespace-nowrap"
+        style={{ minWidth: 120, color: 'var(--text)' }}
+      >
+        {dateLabel}
+      </span>
+      <NavButton onClick={goNext} label="›" />
+      <TodayButton onClick={goToday} />
+      <div className="flex-1" />
+      <input
+        data-search-input
+        type="text"
+        placeholder="Search"
+        value={searchQuery}
+        onChange={e => setSearchQuery(e.target.value)}
+        className="text-[12px] px-2.5 py-1.5 rounded-[7px] transition-all duration-200"
+        style={{
+          background: 'var(--surface2)',
+          border: '1px solid var(--border)',
+          color: 'var(--text)',
+          outline: 'none',
+          width: 100,
+        }}
+        onFocus={e => {
+          e.currentTarget.style.borderColor = 'var(--accent)'
+          e.currentTarget.style.width = '150px'
+        }}
+        onBlur={e => {
+          e.currentTarget.style.borderColor = 'var(--border)'
+          e.currentTarget.style.width = '100px'
+        }}
+      />
+      <AddEventButton onClick={handleAddEvent} />
+    </>
+  )
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Single toolbar bar */}
+      {/* InfoBar — one combined bar (date/time/weather + calendar controls) */}
+      <InfoBar rightSlot={calendarRightSlot} />
+
+      {/* Mobile sub-nav — compact controls shown only on mobile */}
       <div
-        className="flex-shrink-0"
+        className="flex md:hidden flex-shrink-0 items-center justify-between px-3 py-2 gap-2"
         style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}
       >
-        {/* Desktop — one unified row: view | nav | chips | controls */}
-        <div className="hidden md:flex items-center gap-2 px-3 py-1.5">
-          {/* View dropdown + day count */}
-          <ViewDropdown views={VIEWS} view={view} onViewChange={changeView} />
-          {view === 'week' && (
-            <DayCountPicker value={scheduleDays} onChange={setScheduleDays} />
-          )}
-
-          {/* Navigation */}
+        <div className="flex items-center gap-1">
           <NavButton onClick={goPrev} label="‹" />
           <span
-            className="text-[14px] font-semibold text-center select-none whitespace-nowrap"
-            style={{ minWidth: 130, color: 'var(--text)' }}
+            className="text-[13px] font-semibold text-center select-none"
+            style={{ minWidth: 110, color: 'var(--text)' }}
           >
             {dateLabel}
           </span>
           <NavButton onClick={goNext} label="›" />
-          <TodayButton onClick={goToday} />
-
-          {/* Profile chips — flex-1 scrollable middle section */}
-          {hasRealSetup && familyMembers.length > 0 ? (
-            <div className="flex-1 overflow-x-auto flex items-center gap-1.5 mx-1 min-w-0" style={{ scrollbarWidth: 'none' }}>
-              {familyMembers.map(m => {
-                const avatarContent = getMemberAvatarContent(m)
-                const isEmoji = m.avatar?.type === 'emoji'
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => toggleMember(m.id)}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded-full whitespace-nowrap border-none cursor-pointer transition-all duration-150 flex-shrink-0"
-                    style={{
-                      background: m.enabled ? `${m.color}22` : 'var(--surface2)',
-                      border: `1px solid ${m.enabled ? m.color + '55' : 'var(--border)'}`,
-                      opacity: m.enabled ? 1 : 0.5,
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 18, height: 18, borderRadius: '50%', background: m.color, color: '#fff',
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: isEmoji ? 10 : 8, fontWeight: 700, flexShrink: 0, lineHeight: 1,
-                      }}
-                    >
-                      {avatarContent}
-                    </span>
-                    <span className="text-[11px] font-medium" style={{ color: m.enabled ? 'var(--text)' : 'var(--text-dim)' }}>
-                      {m.name}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="flex-1" />
-          )}
-
-          {/* Right controls */}
-          {calTypes.length > 0 && (
-            <FiltersDropdown calTypes={calTypes} onToggleCalType={toggleCalType} />
-          )}
-          <input
-            data-search-input
-            type="text"
-            placeholder="Search"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="text-[12px] px-2.5 py-1.5 rounded-[7px] transition-all duration-200"
-            style={{
-              background: 'var(--surface2)',
-              border: '1px solid var(--border)',
-              color: 'var(--text)',
-              outline: 'none',
-              width: 110,
-            }}
-            onFocus={e => {
-              e.currentTarget.style.borderColor = 'var(--accent)'
-              e.currentTarget.style.width = '160px'
-            }}
-            onBlur={e => {
-              e.currentTarget.style.borderColor = 'var(--border)'
-              e.currentTarget.style.width = '110px'
-            }}
-          />
-          <AddEventButton onClick={handleAddEvent} />
         </div>
-
-        {/* Mobile sub-nav */}
-        <div className="flex md:hidden items-center justify-between px-3 py-2 gap-2">
-          <div className="flex items-center gap-1">
-            <NavButton onClick={goPrev} label="‹" />
-            <span
-              className="text-[13px] font-semibold text-center select-none"
-              style={{ minWidth: 110, color: 'var(--text)' }}
+        <div className="flex items-center gap-1.5">
+          <TodayButton onClick={goToday} />
+          <ViewDropdown views={VIEWS} view={view} onViewChange={changeView} compact />
+          {familyMembers.length > 0 && (
+            <button
+              onClick={() => setMobileFiltersOpen(true)}
+              className="w-8 h-8 flex items-center justify-center rounded-[7px] text-sm cursor-pointer transition-all duration-150 border-none"
+              style={{
+                background: anyFilterOff ? 'var(--accent-glow)' : 'var(--surface2)',
+                border: `1px solid ${anyFilterOff ? 'var(--accent)' : 'var(--border)'}`,
+                color: anyFilterOff ? 'var(--accent)' : 'var(--text-dim)',
+              }}
             >
-              {dateLabel}
-            </span>
-            <NavButton onClick={goNext} label="›" />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <TodayButton onClick={goToday} />
-            <ViewDropdown views={VIEWS} view={view} onViewChange={changeView} compact />
-            {familyMembers.length > 0 && (
-              <button
-                onClick={() => setMobileFiltersOpen(true)}
-                className="w-8 h-8 flex items-center justify-center rounded-[7px] text-sm cursor-pointer transition-all duration-150 border-none"
-                style={{
-                  background: anyFilterOff ? 'var(--accent-glow)' : 'var(--surface2)',
-                  border: `1px solid ${anyFilterOff ? 'var(--accent)' : 'var(--border)'}`,
-                  color: anyFilterOff ? 'var(--accent)' : 'var(--text-dim)',
-                }}
-              >
-                ⊞
-              </button>
-            )}
-            <AddEventButton onClick={handleAddEvent} compact />
-          </div>
+              ⊞
+            </button>
+          )}
+          <AddEventButton onClick={handleAddEvent} compact />
         </div>
       </div>
+
+      {/* Profile chips strip — below InfoBar, above calendar content */}
+      {hasRealSetup && familyMembers.length > 0 && (
+        <div
+          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 overflow-x-auto"
+          style={{
+            background: 'var(--surface)',
+            borderBottom: '1px solid var(--border)',
+            scrollbarWidth: 'none',
+          }}
+        >
+          {familyMembers.map(m => {
+            const avatarContent = getMemberAvatarContent(m)
+            const isEmoji = m.avatar?.type === 'emoji'
+            return (
+              <button
+                key={m.id}
+                onClick={() => toggleMember(m.id)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full whitespace-nowrap border-none cursor-pointer transition-all duration-150 flex-shrink-0"
+                style={{
+                  background: m.enabled ? `${m.color}22` : 'var(--surface2)',
+                  border: `1px solid ${m.enabled ? m.color + '55' : 'var(--border)'}`,
+                  opacity: m.enabled ? 1 : 0.5,
+                }}
+              >
+                <span
+                  style={{
+                    width: 18, height: 18, borderRadius: '50%', background: m.color, color: '#fff',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: isEmoji ? 10 : 8, fontWeight: 700, flexShrink: 0, lineHeight: 1,
+                  }}
+                >
+                  {avatarContent}
+                </span>
+                <span className="text-[11px] font-medium" style={{ color: m.enabled ? 'var(--text)' : 'var(--text-dim)' }}>
+                  {m.name}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Error banners */}
       {calError && (

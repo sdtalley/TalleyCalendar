@@ -1,6 +1,6 @@
 # FamilyHub Calendar — Master Project Specification
 
-**Current state (2026-04-22):** Phase 3A complete (3 features, 3 commits). Phase 3B next: Chores → Routines → Lists → Rewards.  
+**Current state (2026-04-23):** Phase 3B Features 4–6 complete (Chores, Routines, Lists). UX polish commits done: Schedule view, DayCountPicker, InfoBar one-bar architecture. Feature 7 (Rewards) is next.  
 **Detailed Phase 3 implementation specs:** see Claude Code memory → `phase3_implementation_plan.md`
 
 ---
@@ -65,40 +65,44 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 
 ## UI Layout Architecture
 
-### AppShell (current — post pre-Phase 3 #4)
+### AppShell (current — post UX-2 InfoBar architecture)
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  TopBar — always visible: app name · clock · weather      │
+│  InfoBar (rendered by each Tab) — ONE bar:               │
+│  LEFT: date · time · weather   RIGHT: tab-specific ctrls │
 ├──────┬───────────────────────────────────────────────────┤
-│      │                                                   │
-│ Nav  │          Active Tab (full-screen content)         │
-│ Side │                                                   │
+│      │  [Profile chips strip — CalendarTab only]        │
+│ Nav  │                                                   │
+│ Side │          Active Tab content area                  │
 │ bar  │   Calendar / Tasks / Rewards / Meals /            │
 │ 72px │   Lists / Sleep                                   │
 │      │                                                   │
 └──────┴───────────────────────────────────────────────────┘
   landscape: sidebar left │ portrait/mobile: sidebar bottom (60px)
+  mobile: InfoBar shows left side only; tab-specific controls hidden (md:hidden)
 ```
 
 ### Tab Structure
 
 | Tab | Content | Status |
 |---|---|---|
-| **Calendar** | Month / Schedule (1–7 days) / Agenda + own sub-nav | ✅ Live |
-| **Tasks** | Chores + Routines | Phase 3B |
-| **Rewards** | Stars + Reward redemption | Phase 3B |
+| **Calendar** | Month / Schedule (1–7 days) / Agenda | ✅ Live |
+| **Tasks** | Chores + Routines (Day/Week view redesign pending) | ✅ Live (partial) |
+| **Rewards** | Stars + Reward redemption | Feature 7 next |
 | **Meals** | Meal planner + Recipe Box | Phase 3C |
-| **Lists** | Custom lists (To Do / Grocery / Other) | Phase 3B |
+| **Lists** | Custom lists (To Do / Grocery / Other) | ✅ Live |
 | **Sleep** | Sleep mode control + schedule | Phase 3D |
 | Settings | `<Link href="/settings">` (not a tab) | ✅ Live |
 
 ### Layout rules
-- **AppShell** owns: NavSidebar + TopBar + tab switcher + `useScreenDim`. No business logic.
-- **TopBar**: global info bar only — clock, date, weather. No calendar-specific controls.
-- **CalendarTab**: owns all calendar logic + its own sub-nav — one unified bar containing: view dropdown (Month/Schedule/Agenda), day-count picker (Schedule: 1–7 days), prev/next/today, scrollable member chips, filters dropdown, search, add event. Profile chips merged into sub-nav (no separate chips strip). Touch swipe left/right navigates dates on all views.
+- **AppShell** owns: NavSidebar + tab switcher + `useScreenDim`. No TopBar — each tab renders its own InfoBar.
+- **InfoBar**: shared component — left side always shows date (Mon Apr 28) + time (10:51 AM) + weather. Right side (`rightSlot` prop) contains tab-specific controls, visible on desktop only (`hidden md:flex`). TopBar is deprecated.
+- **CalendarTab InfoBar right slot**: `[Schedule ▾] [Nd?] [⊞ Filter?] [<] [date range] [>] [Today] [Search] [+ Add]`. Profile chips are a separate strip below InfoBar (Skylight-accurate: chips are in tab content area, not info bar).
+- **TasksTab InfoBar right slot**: `[○ Day] [□ Week]` toggle (full layout redesign pending with Feature 7).
 - **NavSidebar**: CSS flex `order` trick — `order-first` landscape, `order-last` portrait. No `fixed` positioning.
 - `/settings` route kept separate (OAuth callbacks redirect there); Settings item is a `<Link>`.
+- Touch swipe left/right navigates dates on all calendar views.
 
 ---
 
@@ -203,6 +207,8 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 - [x] Feature 4: Chores (emoji, repeat, star value, completion with confetti animation) — 93060ce
 - [x] Feature 5: Routines (Morning/Afternoon/Evening blocks; daily auto-reset) — 2b1dd53
 - [x] Feature 6: Lists (To Do / Grocery / Other; subcategories; color-coded grid + detail view) — 86e5305
+- [x] UX-1: Calendar polish — Schedule view rename, DayCountPicker (1–7 days), single toolbar, touch swipe, h-full fixes — b1dd1d5
+- [x] UX-2: InfoBar one-bar architecture — Clock shows date+time, each tab renders own InfoBar, AppShell drops TopBar, profile chips moved to separate strip — (pending commit)
 - [ ] Feature 7: Rewards / Stars (star balance per profile; reward redemption; celebration animation)
 
 **Phase 3C — Meals Expansion**
@@ -262,19 +268,20 @@ TalleyCalendar/
     ├── components/
     │   ├── ServiceWorkerRegistration.tsx  ← registers /sw.js on mount ('use client')
     │   ├── layout/
-    │   │   ├── AppShell.tsx           ← root shell: NavSidebar + TopBar + tab switcher + useScreenDim
+    │   │   ├── AppShell.tsx           ← root shell: NavSidebar + tab switcher + useScreenDim (no TopBar)
     │   │   ├── NavSidebar.tsx         ← left/bottom tab nav; exports TabId type
-    │   │   ├── TopBar.tsx             ← global info bar: clock + date + weather
-    │   │   ├── Clock.tsx
+    │   │   ├── InfoBar.tsx            ← ONE combined info bar: left=Clock+Weather, right=rightSlot (per tab)
+    │   │   ├── TopBar.tsx             ← DEPRECATED; no longer rendered anywhere
+    │   │   ├── Clock.tsx              ← shows date (Mon Apr 28) + time (10:51) + AM/PM
     │   │   ├── WeatherWidget.tsx
     │   │   └── Sidebar.tsx            ← RETIRED (Phase 2.5); file kept
     │   ├── tabs/
-    │   │   ├── CalendarTab.tsx        ← all calendar logic + sub-nav (Month/Week/Day)
-    │   │   ├── TasksTab.tsx           ← stub (Phase 3B)
-    │   │   ├── RewardsTab.tsx         ← stub (Phase 3B)
-    │   │   ├── MealsTab.tsx           ← stub (Phase 3C)
-    │   │   ├── ListsTab.tsx           ← stub (Phase 3B)
-    │   │   └── SleepTab.tsx           ← stub (Phase 3D)
+    │   │   ├── CalendarTab.tsx        ← all calendar logic; InfoBar at top; profile chips strip; mobile sub-nav
+    │   │   ├── TasksTab.tsx           ← chores + routines; InfoBar with Day/Week placeholder
+    │   │   ├── RewardsTab.tsx         ← stub; InfoBar
+    │   │   ├── MealsTab.tsx           ← stub; InfoBar
+    │   │   ├── ListsTab.tsx           ← full lists; InfoBar with + New List right slot
+    │   │   └── SleepTab.tsx           ← stub; InfoBar
     │   ├── calendar/
     │   │   ├── MonthView.tsx
     │   │   ├── WeekView.tsx           ← DraggableEventBlock + useDrag; drag-to-create removed
