@@ -208,7 +208,7 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 - [x] Feature 5: Routines (Morning/Afternoon/Evening blocks; daily auto-reset) — 2b1dd53
 - [x] Feature 6: Lists (To Do / Grocery / Other; subcategories; color-coded grid + detail view) — 86e5305
 - [x] UX-1: Calendar polish — Schedule view rename, DayCountPicker (1–7 days), single toolbar, touch swipe, h-full fixes — b1dd1d5
-- [x] UX-2: InfoBar one-bar architecture — Clock shows date+time, each tab renders own InfoBar, AppShell drops TopBar, profile chips moved to separate strip — (pending commit)
+- [x] UX-2: InfoBar one-bar architecture — Clock shows date+time, each tab renders own InfoBar, AppShell drops TopBar, profile chips moved to separate strip — d5b5d7d
 - [ ] Feature 7: Rewards / Stars (star balance per profile; reward redemption; celebration animation)
 
 **Phase 3C — Meals Expansion**
