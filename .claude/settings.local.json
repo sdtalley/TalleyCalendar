@@ -4,7 +4,8 @@
       "Bash(command -v node)",
       "Bash(command -v npm)",
       "Bash(npm --version)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
