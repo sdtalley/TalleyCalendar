@@ -214,7 +214,7 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 - [x] UX-1: Calendar polish — Schedule view rename, DayCountPicker (1–7 days), single toolbar, touch swipe, h-full fixes — b1dd1d5
 - [x] UX-2: InfoBar one-bar architecture — Clock shows date+time, each tab renders own InfoBar, AppShell drops TopBar — d5b5d7d
 - [x] UX-3: Day view rebuilt — DayView.tsx two-panel (mini-cal left + event list right) — f6da259
-- [x] UX-4: Week view + visual overhaul — CalendarWeekView.tsx (7-day card grid), event cards (title+time+avatar), side-by-side overlapping events, filter chip UI, FAB, SearchChip, month day popup, InfoBar date label — (pending commit)
+- [x] UX-4: Week view + visual overhaul — CalendarWeekView.tsx (7-day card grid), event cards (title+time+avatar), side-by-side overlapping events, filter chip UI, FAB, SearchChip, month day popup, InfoBar date label — 33f2acf
 - [ ] 3B-GAP-A: Chore unskip API + UI ← **NEXT**
 - [ ] 3B-GAP-B through J: Chores/Routines fixes + TasksTab Day/Week redesign
 - [ ] Feature 7: Rewards / Stars (star balance per profile; reward redemption; celebration animation)
