@@ -17,6 +17,7 @@ interface MonthViewProps {
   selectedDate: Date
   events: CalendarEvent[]
   onSelectDate: (date: Date) => void
+  onDayClick?: (date: Date, rect: DOMRect) => void
   onEventClick: (event: CalendarEvent) => void
   onAddEventOnDate?: (date: Date) => void
   onMonthReschedule?: (event: CalendarEvent, newDate: Date) => void
@@ -27,6 +28,7 @@ export function MonthView({
   selectedDate,
   events,
   onSelectDate,
+  onDayClick,
   onEventClick,
   onAddEventOnDate,
   onMonthReschedule,
@@ -183,9 +185,13 @@ export function MonthView({
             <div
               key={i}
               data-date={dateKey}
-              onClick={() => {
+              onClick={(e) => {
                 if (longPressActive.current) { longPressActive.current = false; return }
-                onSelectDate(date)
+                if (onDayClick) {
+                  onDayClick(date, e.currentTarget.getBoundingClientRect())
+                } else {
+                  onSelectDate(date)
+                }
               }}
               onDoubleClick={() => onAddEventOnDate?.(date)}
               onTouchStart={e => {

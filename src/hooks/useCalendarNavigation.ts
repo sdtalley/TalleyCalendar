@@ -19,6 +19,8 @@ export function useCalendarNavigation(weekStep = 7) {
       const d = new Date(prev)
       if (view === 'month') {
         d.setMonth(d.getMonth() - 1)
+      } else if (view === 'week') {
+        d.setDate(d.getDate() - 7)
       } else if (view === 'schedule') {
         d.setDate(d.getDate() - weekStep)
       } else {
@@ -33,6 +35,8 @@ export function useCalendarNavigation(weekStep = 7) {
       const d = new Date(prev)
       if (view === 'month') {
         d.setMonth(d.getMonth() + 1)
+      } else if (view === 'week') {
+        d.setDate(d.getDate() + 7)
       } else if (view === 'schedule') {
         d.setDate(d.getDate() + weekStep)
       } else {

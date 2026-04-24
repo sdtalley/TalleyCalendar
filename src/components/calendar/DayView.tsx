@@ -1,8 +1,21 @@
 ﻿'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { sameDay, eventSpansDay, formatTime, hexToRgba } from '@/lib/utils'
-import type { CalendarEvent } from '@/lib/calendar/types'
+import { sameDay, eventSpansDay, formatTimeRange, hexToRgba } from '@/lib/utils'
+import type { CalendarEvent, FamilyMemberUI } from '@/lib/calendar/types'
+
+function getMemberInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  if (parts.length === 1) return (parts[0][0] ?? '?').toUpperCase()
+  return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase()
+}
+
+function getAvatarContent(m: FamilyMemberUI): { content: string; isEmoji: boolean } {
+  if (m.avatar?.type === 'emoji') return { content: m.avatar.value, isEmoji: true }
+  if (m.avatar?.type === 'initials' && m.avatar.value) return { content: m.avatar.value, isEmoji: false }
+  return { content: getMemberInitials(m.name), isEmoji: false }
+}
 
 const DAY_ABBR = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 const MONTH_NAMES = [
@@ -13,12 +26,13 @@ const MONTH_NAMES = [
 interface DayViewProps {
   currentDate: Date
   events: CalendarEvent[]
+  familyMembers?: FamilyMemberUI[]
   onEventClick: (event: CalendarEvent) => void
   onSelectDate: (date: Date) => void
   onAddEvent?: (date: Date) => void
 }
 
-export function DayView({ currentDate, events, onEventClick, onSelectDate, onAddEvent }: DayViewProps) {
+export function DayView({ currentDate, events, familyMembers = [], onEventClick, onSelectDate, onAddEvent }: DayViewProps) {
   const today = useMemo(() => {
     const d = new Date()
     d.setHours(0, 0, 0, 0)
@@ -229,48 +243,49 @@ export function DayView({ currentDate, events, onEventClick, onSelectDate, onAdd
               )}
             </div>
           ) : (
-            <div className="flex flex-col gap-2.5">
-              {dayEvents.map(ev => (
-                <button
-                  key={ev.id}
-                  onClick={() => onEventClick(ev)}
-                  className="flex items-center gap-4 w-full text-left rounded-2xl px-5 py-4 border-none cursor-pointer transition-all duration-100"
-                  style={{
-                    background: hexToRgba(ev.color, 0.1),
-                    borderLeft: `4px solid ${ev.color}`,
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.1)' }}
-                  onMouseLeave={e => { e.currentTarget.style.filter = '' }}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-[15px] truncate" style={{ color: 'var(--text)' }}>
-                      {ev.title}
-                    </div>
-                    {ev.location && (
-                      <div className="text-[12px] mt-0.5 truncate" style={{ color: 'var(--text-dim)' }}>
-                        &#128205; {ev.location}
+            <div className="flex flex-col gap-2">
+              {dayEvents.map(ev => {
+                const member = familyMembers.find(m => m.id === ev.familyMemberId)
+                const avatar = member ? getAvatarContent(member) : null
+                return (
+                  <button
+                    key={ev.id}
+                    onClick={() => onEventClick(ev)}
+                    className="flex items-center gap-3 w-full text-left rounded-xl px-4 py-3 border-none cursor-pointer transition-all duration-100"
+                    style={{
+                      background: hexToRgba(ev.color, 0.1),
+                      borderLeft: `4px solid ${ev.color}`,
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.1)' }}
+                    onMouseLeave={e => { e.currentTarget.style.filter = '' }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-[15px] truncate" style={{ color: 'var(--text)' }}>
+                        {ev.title}
                       </div>
+                      <div className="text-[13px] mt-0.5" style={{ color: 'var(--text-dim)' }}>
+                        {ev.allDay ? 'All day' : formatTimeRange(ev.start, ev.end)}
+                      </div>
+                      {ev.location && (
+                        <div className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--text-faint)' }}>
+                          &#128205; {ev.location}
+                        </div>
+                      )}
+                    </div>
+                    {avatar ? (
+                      <span style={{
+                        width: 32, height: 32, borderRadius: '50%', background: ev.color, color: '#fff',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: avatar.isEmoji ? 14 : 11, fontWeight: 700, flexShrink: 0,
+                      }}>
+                        {avatar.content}
+                      </span>
+                    ) : (
+                      <span style={{ width: 32, height: 32, borderRadius: '50%', background: ev.color, flexShrink: 0 }} />
                     )}
-                  </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <span className="text-[13px] font-semibold" style={{ color: ev.color }}>
-                      {ev.allDay
-                        ? 'All day'
-                        : `${formatTime(ev.start)} – ${formatTime(ev.end)}`}
-                    </span>
-                    <span
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: '50%',
-                        background: ev.color,
-                        flexShrink: 0,
-                        display: 'inline-block',
-                      }}
-                    />
-                  </div>
-                </button>
-              ))}
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>

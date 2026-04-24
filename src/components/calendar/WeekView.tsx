@@ -2,8 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDrag } from '@use-gesture/react'
-import { getWeekDates, sameDay, eventSpansDay, hexToRgba, formatTime } from '@/lib/utils'
-import type { CalendarEvent } from '@/lib/calendar/types'
+import { getWeekDates, sameDay, eventSpansDay, hexToRgba, formatTime, formatTimeRange } from '@/lib/utils'
+import type { CalendarEvent, FamilyMemberUI } from '@/lib/calendar/types'
+
+function getMemberInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  if (parts.length === 1) return (parts[0][0] ?? '?').toUpperCase()
+  return ((parts[0][0] ?? '') + (parts[parts.length - 1][0] ?? '')).toUpperCase()
+}
+
+function getAvatarContent(m: FamilyMemberUI): { content: string; isEmoji: boolean } {
+  if (m.avatar?.type === 'emoji') return { content: m.avatar.value, isEmoji: true }
+  if (m.avatar?.type === 'initials' && m.avatar.value) return { content: m.avatar.value, isEmoji: false }
+  return { content: getMemberInitials(m.name), isEmoji: false }
+}
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const HOUR_HEIGHT = 60 // px per hour
@@ -19,9 +32,42 @@ function snapToQuarter(minutes: number): number {
 interface WeekViewProps {
   currentDate: Date
   events: CalendarEvent[]
+  familyMembers?: FamilyMemberUI[]
   onEventClick: (event: CalendarEvent) => void
   onReschedule?: (event: CalendarEvent, newDate: Date, newStartMinutes: number) => void
   numDays?: number
+}
+
+// ── Overlap layout ─────────────────────────────────────────────────────────
+// Assigns each event a column index and total column count so overlapping
+// events render side-by-side instead of stacking.
+
+function layoutDayEvents(
+  events: CalendarEvent[]
+): Array<{ event: CalendarEvent; col: number; totalCols: number }> {
+  if (!events.length) return []
+  const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime())
+  const colEndTimes: number[] = []
+  const cols: number[] = []
+
+  for (const ev of sorted) {
+    let col = 0
+    while (col < colEndTimes.length && colEndTimes[col] > ev.start.getTime()) col++
+    cols.push(col)
+    colEndTimes[col] = ev.end.getTime()
+  }
+
+  return sorted.map((event, i) => {
+    let totalCols = cols[i] + 1
+    for (let j = 0; j < sorted.length; j++) {
+      if (i === j) continue
+      if (sorted[i].start.getTime() < sorted[j].end.getTime() &&
+          sorted[i].end.getTime() > sorted[j].start.getTime()) {
+        totalCols = Math.max(totalCols, cols[j] + 1)
+      }
+    }
+    return { event, col: cols[i], totalCols }
+  })
 }
 
 // ── DraggableEventBlock ────────────────────────────────────────────────────
@@ -30,10 +76,13 @@ interface DraggableEventBlockProps {
   ev: CalendarEvent
   top: number
   height: number
+  colLeft: number
+  colWidth: number
   dayIndex: number
   columnRefs: React.MutableRefObject<(HTMLDivElement | null)[]>
   bodyRef: React.RefObject<HTMLDivElement>
   weekDates: Date[]
+  familyMembers: FamilyMemberUI[]
   onEventClick: (ev: CalendarEvent) => void
   onReschedule?: (ev: CalendarEvent, newDate: Date, topMin: number) => void
   onGhostChange: (ghost: { dayIndex: number; topMin: number; event: CalendarEvent } | null) => void
@@ -41,9 +90,11 @@ interface DraggableEventBlockProps {
 }
 
 function DraggableEventBlock({
-  ev, top, height, dayIndex, columnRefs, bodyRef, weekDates,
+  ev, top, height, colLeft, colWidth, dayIndex, columnRefs, bodyRef, weekDates, familyMembers,
   onEventClick, onReschedule, onGhostChange, isGhosting,
 }: DraggableEventBlockProps) {
+  const member = familyMembers.find(m => m.id === ev.familyMemberId)
+  const avatar = member ? getAvatarContent(member) : null
   const isDraggable = !!onReschedule &&
     (ev.provider === 'google' || ev.provider === 'outlook') &&
     ev.calendarType !== 'work'
@@ -152,10 +203,12 @@ function DraggableEventBlock({
       {...bind()}
       data-event-id={ev.id}
       onClick={() => onEventClick(ev)}
-      className="absolute left-[2px] right-[2px] rounded-md px-2 py-1 text-[11px] font-medium overflow-hidden border-none text-left transition-all duration-100"
+      className="absolute rounded-md px-2 py-1 text-[11px] font-medium overflow-hidden border-none text-left transition-all duration-100"
       style={{
         top,
         height,
+        left: `calc(${colLeft * 100}% + 2px)`,
+        width: `calc(${colWidth * 100}% - 4px)`,
         background: hexToRgba(ev.color, isGhosting ? 0.08 : 0.2),
         color: ev.color,
         borderLeft: `3px solid ${ev.color}`,
@@ -176,14 +229,34 @@ function DraggableEventBlock({
         e.currentTarget.style.zIndex = '2'
       }}
     >
-      <div>{ev.title}</div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, height: '100%' }}>
+        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          <div style={{ fontWeight: 600, fontSize: 11, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {ev.title}
+          </div>
+          {height > 28 && !ev.allDay && (
+            <div style={{ fontSize: 9.5, marginTop: 1, lineHeight: 1.2, opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {formatTimeRange(ev.start, ev.end)}
+            </div>
+          )}
+        </div>
+        {avatar && (
+          <span style={{
+            width: 13, height: 13, borderRadius: '50%', background: ev.color, color: '#fff',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: avatar.isEmoji ? 7 : 5, fontWeight: 700, flexShrink: 0, lineHeight: 1,
+          }}>
+            {avatar.content}
+          </span>
+        )}
+      </div>
     </button>
   )
 }
 
 // ── WeekView ───────────────────────────────────────────────────────────────
 
-export function WeekView({ currentDate, events, onEventClick, onReschedule, numDays = 7 }: WeekViewProps) {
+export function WeekView({ currentDate, events, familyMembers = [], onEventClick, onReschedule, numDays = 7 }: WeekViewProps) {
   const today = new Date()
   const weekDates = getWeekDates(currentDate).slice(0, numDays)
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -361,6 +434,7 @@ export function WeekView({ currentDate, events, onEventClick, onReschedule, numD
         {/* Day columns */}
         {weekDates.map((day, di) => {
           const dayEvents = timedEvents.filter(e => sameDay(e.start, day))
+          const layout = layoutDayEvents(dayEvents)
           const nowMinutes = today.getHours() * 60 + today.getMinutes()
 
           return (
@@ -378,8 +452,8 @@ export function WeekView({ currentDate, events, onEventClick, onReschedule, numD
                 />
               ))}
 
-              {/* Events */}
-              {dayEvents.map(ev => {
+              {/* Events — side-by-side when overlapping */}
+              {layout.map(({ event: ev, col, totalCols }) => {
                 const startMin = ev.start.getHours() * 60 + ev.start.getMinutes()
                 const endMin = ev.end.getHours() * 60 + ev.end.getMinutes()
                 const top = (startMin / 60) * HOUR_HEIGHT
@@ -391,10 +465,13 @@ export function WeekView({ currentDate, events, onEventClick, onReschedule, numD
                     ev={ev}
                     top={top}
                     height={height}
+                    colLeft={col / totalCols}
+                    colWidth={1 / totalCols}
                     dayIndex={di}
                     columnRefs={columnRefs}
                     bodyRef={bodyRef}
                     weekDates={weekDates}
+                    familyMembers={familyMembers}
                     onEventClick={onEventClick}
                     onReschedule={onReschedule}
                     onGhostChange={handleGhostChange}

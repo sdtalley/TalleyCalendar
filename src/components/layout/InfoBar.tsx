@@ -10,7 +10,7 @@ interface InfoBarProps {
 export function InfoBar({ rightSlot }: InfoBarProps) {
   return (
     <header
-      className="flex-shrink-0 z-10 flex items-center px-4 gap-4"
+      className="flex-shrink-0 z-30 flex items-center px-4 gap-3"
       style={{
         height: 52,
         background: 'var(--surface)',
@@ -23,17 +23,12 @@ export function InfoBar({ rightSlot }: InfoBarProps) {
         <WeatherWidget />
       </div>
 
-      {/* Right: tab-specific controls — desktop only */}
+      {/* Right: tab-specific controls — desktop only.
+          No overflow-x-auto: clips absolutely-positioned dropdown popups. */}
       {rightSlot && (
-        <>
-          <div
-            className="hidden md:block flex-shrink-0"
-            style={{ width: 1, height: 28, background: 'var(--border)' }}
-          />
-          <div className="hidden md:flex items-center gap-2 flex-1 min-w-0 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-            {rightSlot}
-          </div>
-        </>
+        <div className="hidden md:flex items-center gap-2 flex-1 min-w-0">
+          {rightSlot}
+        </div>
       )}
     </header>
   )

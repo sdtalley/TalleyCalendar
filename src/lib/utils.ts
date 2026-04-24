@@ -68,6 +68,28 @@ export function hexToRgba(hex: string, opacity: number): string {
   return `rgba(${r},${g},${b},${opacity})`
 }
 
+/** Format a time without :00 for whole hours — "9 AM", "9:30 AM" */
+export function formatTimeShort(date: Date): string {
+  const h = date.getHours() % 12 || 12
+  const m = date.getMinutes()
+  const suffix = date.getHours() < 12 ? 'AM' : 'PM'
+  return m === 0 ? `${h} ${suffix}` : `${h}:${String(m).padStart(2, '0')} ${suffix}`
+}
+
+/** Format a time range — "9 – 10:30 AM" or "11 AM – 1 PM" */
+export function formatTimeRange(start: Date, end: Date): string {
+  const startSuffix = start.getHours() < 12 ? 'AM' : 'PM'
+  const endSuffix = end.getHours() < 12 ? 'AM' : 'PM'
+  const fmt = (d: Date, showSuffix: boolean): string => {
+    const h = d.getHours() % 12 || 12
+    const m = d.getMinutes()
+    const s = showSuffix ? ` ${d.getHours() < 12 ? 'AM' : 'PM'}` : ''
+    return m === 0 ? `${h}${s}` : `${h}:${String(m).padStart(2, '0')}${s}`
+  }
+  if (startSuffix === endSuffix) return `${fmt(start, false)} – ${fmt(end, true)}`
+  return `${fmt(start, true)} – ${fmt(end, true)}`
+}
+
 /** Returns true if an event overlaps with a given calendar day.
  *  Pass allDay=true for all-day events so UTC day boundaries are used,
  *  avoiding timezone-induced day-shift (e.g. UTC midnight → prev day local). */

@@ -5,6 +5,7 @@ import { InfoBar } from '@/components/layout/InfoBar'
 import { MonthView } from '@/components/calendar/MonthView'
 import { WeekView } from '@/components/calendar/WeekView'
 import { DayView } from '@/components/calendar/DayView'
+import { CalendarWeekView } from '@/components/calendar/CalendarWeekView'
 import { EventModal } from '@/components/calendar/EventModal'
 import { EventDetailModal } from '@/components/calendar/EventDetailModal'
 import { MobileDayDrawer } from '@/components/calendar/MobileDayDrawer'
@@ -40,6 +41,7 @@ function formatScheduleRange(currentDate: Date, numDays: number): string {
 
 const VIEWS: { id: CalendarView; label: string }[] = [
   { id: 'month', label: 'Month' },
+  { id: 'week', label: 'Week' },
   { id: 'schedule', label: 'Schedule' },
   { id: 'day', label: 'Day' },
 ]
@@ -83,6 +85,7 @@ export function CalendarTab() {
   const [searchQuery, setSearchQuery] = useState('')
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const [dayPopup, setDayPopup] = useState<{ date: Date; rect: DOMRect } | null>(null)
   const touchStartX = useRef<number>(0)
   const touchStartY = useRef<number>(0)
 
@@ -122,7 +125,8 @@ export function CalendarTab() {
         case 't': case 'T': goToday(); break
         case 'n': case 'N': setModalOpen(true); break
         case 'm': changeView('month'); break
-        case 'w': changeView('schedule'); break
+        case 'w': changeView('week'); break
+        case 's': changeView('schedule'); break
         case 'd': changeView('day'); break
         case '/': {
           e.preventDefault()
@@ -141,6 +145,15 @@ export function CalendarTab() {
   function handleSelectDate(date: Date) {
     selectDate(date)
     setMobileDrawerOpen(true)
+  }
+
+  function handleMonthDayClick(date: Date, rect: DOMRect) {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      selectDate(date)
+      setMobileDrawerOpen(true)
+    } else {
+      setDayPopup({ date, rect })
+    }
   }
 
   function handleAddEvent() {
@@ -319,56 +332,44 @@ export function CalendarTab() {
 
   const dateLabel =
     view === 'day'      ? currentDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) :
+    view === 'week'     ? formatScheduleRange(currentDate, 7) :
     view === 'schedule' ? formatScheduleRange(currentDate, scheduleDays) :
                           formatMonthYear(currentDate)
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   // ── InfoBar right slot (desktop calendar controls) ─────────────────────────
+  // [dateLabel] [spacer] [View ▾] [DayCount?] [⊞ Filter] [‹] [Today] [›] [🔍]
+  // Dropdowns use zIndex:9999 to escape the calendar stacking context below.
 
   const calendarRightSlot = (
     <>
+      {/* Current date / range — left portion of the right slot */}
+      <span
+        className="text-[13px] font-semibold flex-shrink-0 select-none"
+        style={{ color: 'var(--text)' }}
+      >
+        {dateLabel}
+      </span>
+      <div className="flex-1" />
+
       <ViewDropdown views={VIEWS} view={view} onViewChange={changeView} />
       {view === 'schedule' && (
         <DayCountPicker value={scheduleDays} onChange={setScheduleDays} />
       )}
-      {calTypes.length > 0 && (
-        <FiltersDropdown calTypes={calTypes} onToggleCalType={toggleCalType} />
-      )}
-      <NavButton onClick={goPrev} label="‹" />
-      <span
-        className="text-[13px] font-semibold text-center select-none whitespace-nowrap"
-        style={{ minWidth: 120, color: 'var(--text)' }}
-      >
-        {dateLabel}
-      </span>
-      <NavButton onClick={goNext} label="›" />
-      <TodayButton onClick={goToday} />
-      <div className="flex-1" />
-      <input
-        data-search-input
-        type="text"
-        placeholder="Search"
-        value={searchQuery}
-        onChange={e => setSearchQuery(e.target.value)}
-        className="text-[12px] px-2.5 py-1.5 rounded-[7px] transition-all duration-200"
-        style={{
-          background: 'var(--surface2)',
-          border: '1px solid var(--border)',
-          color: 'var(--text)',
-          outline: 'none',
-          width: 100,
-        }}
-        onFocus={e => {
-          e.currentTarget.style.borderColor = 'var(--accent)'
-          e.currentTarget.style.width = '150px'
-        }}
-        onBlur={e => {
-          e.currentTarget.style.borderColor = 'var(--border)'
-          e.currentTarget.style.width = '100px'
-        }}
+
+      {/* Filter panel — profiles + calendar types inside */}
+      <FiltersDropdown
+        familyMembers={hasRealSetup ? familyMembers : []}
+        calTypes={calTypes}
+        anyFilterOff={anyFilterOff}
+        onToggleMember={toggleMember}
+        onToggleCalType={toggleCalType}
       />
-      <AddEventButton onClick={handleAddEvent} />
+      <NavButton onClick={goPrev} label="‹" />
+      <TodayButton onClick={goToday} />
+      <NavButton onClick={goNext} label="›" />
+      <SearchChip value={searchQuery} onChange={setSearchQuery} />
     </>
   )
 
@@ -412,47 +413,6 @@ export function CalendarTab() {
         </div>
       </div>
 
-      {/* Profile chips strip — below InfoBar, above calendar content */}
-      {hasRealSetup && familyMembers.length > 0 && (
-        <div
-          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 overflow-x-auto"
-          style={{
-            background: 'var(--surface)',
-            borderBottom: '1px solid var(--border)',
-            scrollbarWidth: 'none',
-          }}
-        >
-          {familyMembers.map(m => {
-            const avatarContent = getMemberAvatarContent(m)
-            const isEmoji = m.avatar?.type === 'emoji'
-            return (
-              <button
-                key={m.id}
-                onClick={() => toggleMember(m.id)}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-full whitespace-nowrap border-none cursor-pointer transition-all duration-150 flex-shrink-0"
-                style={{
-                  background: m.enabled ? `${m.color}22` : 'var(--surface2)',
-                  border: `1px solid ${m.enabled ? m.color + '55' : 'var(--border)'}`,
-                  opacity: m.enabled ? 1 : 0.5,
-                }}
-              >
-                <span
-                  style={{
-                    width: 18, height: 18, borderRadius: '50%', background: m.color, color: '#fff',
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: isEmoji ? 10 : 8, fontWeight: 700, flexShrink: 0, lineHeight: 1,
-                  }}
-                >
-                  {avatarContent}
-                </span>
-                <span className="text-[11px] font-medium" style={{ color: m.enabled ? 'var(--text)' : 'var(--text-dim)' }}>
-                  {m.name}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      )}
 
       {/* Error banners */}
       {calError && (
@@ -490,15 +450,26 @@ export function CalendarTab() {
               selectedDate={selectedDate}
               events={displayEvents}
               onSelectDate={handleSelectDate}
+              onDayClick={handleMonthDayClick}
               onEventClick={ev => setDetailEvent(ev)}
               onAddEventOnDate={handleAddEventOnDate}
               onMonthReschedule={handleMonthReschedule}
+            />
+          )}
+          {view === 'week' && (
+            <CalendarWeekView
+              currentDate={currentDate}
+              events={displayEvents}
+              familyMembers={familyMembers}
+              onEventClick={ev => setDetailEvent(ev)}
+              onSelectDate={selectDate}
             />
           )}
           {view === 'schedule' && (
             <WeekView
               currentDate={currentDate}
               events={displayEvents}
+              familyMembers={familyMembers}
               onEventClick={ev => setDetailEvent(ev)}
               onReschedule={handleRescheduleEvent}
               numDays={scheduleDays}
@@ -508,12 +479,45 @@ export function CalendarTab() {
             <DayView
               currentDate={currentDate}
               events={displayEvents}
+              familyMembers={familyMembers}
               onEventClick={ev => setDetailEvent(ev)}
               onSelectDate={selectDate}
               onAddEvent={handleAddEventOnDate}
             />
           )}
         </div>
+      )}
+
+      {/* Floating Action Button — bottom-right, overlays content */}
+      <button
+        onClick={handleAddEvent}
+        className="fixed bottom-8 right-8 z-40 flex items-center justify-center rounded-full text-white border-none cursor-pointer transition-all duration-200 select-none"
+        style={{
+          width: 56,
+          height: 56,
+          fontSize: 28,
+          lineHeight: 1,
+          background: 'var(--accent)',
+          boxShadow: '0 8px 32px rgba(108,140,255,0.45)',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.1)' }}
+        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+        title="Add event"
+      >
+        ＋
+      </button>
+
+      {/* Desktop day popup — month view day click */}
+      {dayPopup && (
+        <DayEventsPopup
+          date={dayPopup.date}
+          rect={dayPopup.rect}
+          events={displayEvents}
+          familyMembers={familyMembers}
+          onEventClick={ev => { setDetailEvent(ev); setDayPopup(null) }}
+          onAddEvent={() => { handleAddEventOnDate(dayPopup.date); setDayPopup(null) }}
+          onClose={() => setDayPopup(null)}
+        />
       )}
 
       {/* Mobile drawers */}
@@ -644,7 +648,7 @@ function ViewDropdown({
             borderRadius: 8,
             boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
             minWidth: 120,
-            zIndex: 50,
+            zIndex: 9999,
             overflow: 'hidden',
           }}
         >
@@ -713,7 +717,7 @@ function DayCountPicker({ value, onChange }: { value: number; onChange: (n: numb
             borderRadius: 8,
             boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
             minWidth: 80,
-            zIndex: 50,
+            zIndex: 9999,
             overflow: 'hidden',
           }}
         >
@@ -760,18 +764,25 @@ function AddEventButton({ onClick, compact }: { onClick: () => void; compact?: b
   )
 }
 
-// ── MembersDropdown ────────────────────────────────────────────────────────
+// ── FiltersDropdown ────────────────────────────────────────────────────────
+// Combined filter panel: profile chips + calendar-type chips
 
-function MembersDropdown({
+function FiltersDropdown({
   familyMembers,
+  calTypes,
+  anyFilterOff,
   onToggleMember,
+  onToggleCalType,
 }: {
   familyMembers: FamilyMemberUI[]
+  calTypes: { id: string; name: string; enabled: boolean }[]
+  anyFilterOff: boolean
   onToggleMember: (id: string) => void
+  onToggleCalType: (id: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const anyDisabled = familyMembers.some(m => !m.enabled)
+  const allMembersOn = familyMembers.length === 0 || familyMembers.every(m => m.enabled)
 
   useEffect(() => {
     if (!open) return
@@ -782,135 +793,294 @@ function MembersDropdown({
     return () => document.removeEventListener('mousedown', h)
   }, [open])
 
+  function handleSelectAll() {
+    if (allMembersOn) {
+      familyMembers.filter(m => m.enabled).forEach(m => onToggleMember(m.id))
+    } else {
+      familyMembers.filter(m => !m.enabled).forEach(m => onToggleMember(m.id))
+    }
+  }
+
+  const hasContent = familyMembers.length > 0 || calTypes.length > 0
+
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 rounded-[8px] text-[12px] font-medium cursor-pointer transition-all duration-150 border-none"
+        className="flex items-center gap-1.5 rounded-[8px] text-[12px] font-medium cursor-pointer transition-all duration-150 border-none whitespace-nowrap"
         style={{
           padding: '5px 10px',
-          background: open || anyDisabled ? 'var(--accent-glow)' : 'var(--surface2)',
-          border: `1px solid ${open || anyDisabled ? 'var(--accent)' : 'var(--border)'}`,
-          color: open || anyDisabled ? 'var(--accent)' : 'var(--text-dim)',
+          background: open || anyFilterOff ? 'var(--accent-glow)' : 'var(--surface2)',
+          border: `1px solid ${open || anyFilterOff ? 'var(--accent)' : 'var(--border)'}`,
+          color: open || anyFilterOff ? 'var(--accent)' : 'var(--text-dim)',
         }}
       >
-        Members
-        {anyDisabled && (
+        ⊞ Filter
+        {anyFilterOff && (
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
         )}
       </button>
-      {open && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            right: 0,
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 10,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-            minWidth: 180,
-            zIndex: 50,
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ padding: '8px 12px 6px', fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid var(--border)' }}>
-            Family Members
-          </div>
-          {familyMembers.map(m => (
-            <button
-              key={m.id}
-              onClick={() => onToggleMember(m.id)}
-              className="flex items-center gap-2.5 w-full text-left cursor-pointer transition-colors duration-100"
-              style={{ padding: '8px 12px', background: 'transparent', border: 'none', color: m.enabled ? 'var(--text)' : 'var(--text-dim)', opacity: m.enabled ? 1 : 0.6 }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface2)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <span style={{ width: 10, height: 10, borderRadius: '50%', background: m.enabled ? m.color : 'var(--text-faint)', flexShrink: 0, display: 'inline-block' }} />
-              <span style={{ fontSize: 13 }}>{m.name}</span>
-            </button>
-          ))}
+      {open && hasContent && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+          minWidth: 240, zIndex: 9999,
+        }}>
+          {familyMembers.length > 0 && (
+            <div style={{ padding: '12px 14px', borderBottom: calTypes.length > 0 ? '1px solid var(--border)' : undefined }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Profiles
+                </span>
+                <button
+                  onClick={handleSelectAll}
+                  className="cursor-pointer border-none text-[11px] font-medium"
+                  style={{ background: 'none', color: 'var(--accent)', padding: '0 2px' }}
+                >
+                  {allMembersOn ? 'Deselect all' : 'Select all'}
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {familyMembers.map(m => {
+                  const avatarContent = getMemberAvatarContent(m)
+                  const isEmoji = m.avatar?.type === 'emoji'
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => onToggleMember(m.id)}
+                      className="flex items-center gap-1.5 cursor-pointer border-none transition-all duration-150"
+                      style={{
+                        padding: '4px 10px 4px 4px',
+                        borderRadius: 20,
+                        background: m.enabled ? `${m.color}22` : 'var(--surface2)',
+                        border: `1px solid ${m.enabled ? m.color + '80' : 'var(--border)'}`,
+                        opacity: m.enabled ? 1 : 0.55,
+                      }}
+                    >
+                      <span style={{
+                        width: 22, height: 22, borderRadius: '50%', background: m.color, color: '#fff',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: isEmoji ? 11 : 9, fontWeight: 700, flexShrink: 0,
+                      }}>
+                        {avatarContent}
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: m.enabled ? 'var(--text)' : 'var(--text-dim)' }}>
+                        {m.name}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+          {calTypes.length > 0 && (
+            <div style={{ padding: '12px 14px' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+                Calendar Type
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {calTypes.map(ct => (
+                  <button
+                    key={ct.id}
+                    onClick={() => onToggleCalType(ct.id)}
+                    className="cursor-pointer border-none transition-all duration-150 text-[12px] font-medium"
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: 20,
+                      background: ct.enabled ? 'var(--accent-glow)' : 'var(--surface2)',
+                      border: `1px solid ${ct.enabled ? 'var(--accent)' : 'var(--border)'}`,
+                      color: ct.enabled ? 'var(--accent)' : 'var(--text-dim)',
+                      opacity: ct.enabled ? 1 : 0.55,
+                    }}
+                  >
+                    {ct.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-// ── FiltersDropdown ────────────────────────────────────────────────────────
+// ── DayEventsPopup ─────────────────────────────────────────────────────────
 
-function FiltersDropdown({
-  calTypes,
-  onToggleCalType,
+function DayEventsPopup({
+  date, rect, events, familyMembers, onEventClick, onAddEvent, onClose,
 }: {
-  calTypes: { id: string; name: string; enabled: boolean }[]
-  onToggleCalType: (id: string) => void
+  date: Date
+  rect: DOMRect
+  events: CalendarEvent[]
+  familyMembers: FamilyMemberUI[]
+  onEventClick: (ev: CalendarEvent) => void
+  onAddEvent: () => void
+  onClose: () => void
 }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const anyDisabled = calTypes.some(ct => !ct.enabled)
+  const POPUP_W = 290
+  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
+  const dayEvents = events
+    .filter(e => e.allDay
+      ? (e.start < dayEnd && e.end > dayStart)
+      : (e.start < dayEnd && e.end > dayStart))
+    .sort((a, b) => {
+      if (a.allDay !== b.allDay) return a.allDay ? -1 : 1
+      return a.start.getTime() - b.start.getTime()
+    })
 
-  useEffect(() => {
-    if (!open) return
-    function h(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [open])
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1200
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
+
+  let left = rect.right + 8
+  if (left + POPUP_W > vw - 12) left = rect.left - POPUP_W - 8
+  if (left < 12) left = 12
+
+  let top = rect.top
+  const MAX_H = Math.min(460, vh * 0.7)
+  if (top + MAX_H > vh - 12) top = Math.max(12, vh - MAX_H - 12)
+
+  const headerDate = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 rounded-[8px] text-[12px] font-medium cursor-pointer transition-all duration-150 border-none"
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      <div
+        className="fixed z-50 flex flex-col overflow-hidden"
         style={{
-          padding: '5px 10px',
-          background: open || anyDisabled ? 'var(--accent-glow)' : 'var(--surface2)',
-          border: `1px solid ${open || anyDisabled ? 'var(--accent)' : 'var(--border)'}`,
-          color: open || anyDisabled ? 'var(--accent)' : 'var(--text-dim)',
+          left, top, width: POPUP_W, maxHeight: MAX_H,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 14, boxShadow: '0 12px 40px rgba(0,0,0,0.35)',
         }}
       >
-        Filters
-        {anyDisabled && (
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
-        )}
-      </button>
-      {open && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            right: 0,
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 10,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-            minWidth: 180,
-            zIndex: 50,
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ padding: '8px 12px 6px', fontSize: 10, fontWeight: 600, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid var(--border)' }}>
-            Calendar Type
+        {/* Header */}
+        <div className="flex items-start justify-between px-4 pt-3 pb-2 flex-shrink-0"
+             style={{ borderBottom: '1px solid var(--border)' }}>
+          <div>
+            <div className="font-bold text-[14px]" style={{ color: 'var(--text)' }}>{headerDate}</div>
+            <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-dim)' }}>
+              {dayEvents.length === 0 ? 'No events' : `${dayEvents.length} event${dayEvents.length !== 1 ? 's' : ''}`}
+            </div>
           </div>
-          {calTypes.map(ct => (
+          <div className="flex items-center gap-2">
             <button
-              key={ct.id}
-              onClick={() => onToggleCalType(ct.id)}
-              className="flex items-center gap-2.5 w-full text-left cursor-pointer transition-colors duration-100"
-              style={{ padding: '8px 12px', background: 'transparent', border: 'none', color: ct.enabled ? 'var(--text)' : 'var(--text-dim)' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface2)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              onClick={onAddEvent}
+              className="text-[11px] font-semibold border-none cursor-pointer px-2.5 py-1 rounded-[7px]"
+              style={{ background: 'var(--accent-glow)', color: 'var(--accent)' }}
             >
-              <span
-                style={{ width: 14, height: 14, borderRadius: 4, background: ct.enabled ? 'var(--accent)' : 'transparent', border: ct.enabled ? '2px solid var(--accent)' : '2px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 9, color: '#fff' }}
-              >
-                {ct.enabled && '✓'}
-              </span>
-              <span style={{ fontSize: 13 }}>{ct.name}</span>
+              + Add
             </button>
-          ))}
+            <button onClick={onClose} className="border-none cursor-pointer w-6 h-6 flex items-center justify-center rounded-full text-[16px]"
+                    style={{ background: 'var(--surface2)', color: 'var(--text-dim)' }}>
+              ×
+            </button>
+          </div>
         </div>
+
+        {/* Events list */}
+        <div className="overflow-y-auto flex-1">
+          {dayEvents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 gap-2" style={{ color: 'var(--text-faint)' }}>
+              <span style={{ fontSize: 32 }}>📅</span>
+              <span className="text-[13px]">Nothing scheduled</span>
+            </div>
+          ) : (
+            dayEvents.map(ev => {
+              const member = familyMembers.find(m => m.id === ev.familyMemberId)
+              const avatarContent = member ? getMemberAvatarContent(member) : null
+              const isEmoji = member?.avatar?.type === 'emoji'
+              return (
+                <button
+                  key={ev.id}
+                  onClick={() => onEventClick(ev)}
+                  className="flex items-center gap-3 w-full text-left px-4 py-2.5 border-none cursor-pointer transition-colors duration-100"
+                  style={{ background: 'transparent', borderLeft: `3px solid ${ev.color}`, marginLeft: 0 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface2)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold truncate" style={{ color: 'var(--text)' }}>
+                      {ev.title}
+                    </div>
+                    <div className="text-[11px]" style={{ color: 'var(--text-dim)' }}>
+                      {ev.allDay ? 'All day' : `${ev.start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} – ${ev.end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
+                    </div>
+                  </div>
+                  {avatarContent !== null && (
+                    <span style={{
+                      width: 26, height: 26, borderRadius: '50%', background: ev.color, color: '#fff',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: isEmoji ? 12 : 9, fontWeight: 700, flexShrink: 0,
+                    }}>
+                      {avatarContent}
+                    </span>
+                  )}
+                </button>
+              )
+            })
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── SearchChip ─────────────────────────────────────────────────────────────
+
+function SearchChip({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [expanded, setExpanded] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  function expand() {
+    setExpanded(true)
+    setTimeout(() => inputRef.current?.focus(), 30)
+  }
+
+  function clear() {
+    onChange('')
+    setExpanded(false)
+  }
+
+  if (!expanded && !value) {
+    return (
+      <button
+        onClick={expand}
+        className="w-8 h-8 flex items-center justify-center rounded-[7px] text-sm cursor-pointer transition-all duration-150 border-none flex-shrink-0"
+        style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}
+        title="Search events (/)"
+      >
+        🔍
+      </button>
+    )
+  }
+
+  return (
+    <div
+      className="flex items-center gap-1.5 rounded-[7px] flex-shrink-0"
+      style={{ background: 'var(--surface2)', border: '1px solid var(--border)', padding: '0 8px', height: 32, minWidth: 180 }}
+    >
+      <span style={{ fontSize: 12, color: 'var(--text-dim)', flexShrink: 0 }}>🔍</span>
+      <input
+        ref={inputRef}
+        data-search-input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onBlur={() => { if (!value) setExpanded(false) }}
+        onKeyDown={e => { if (e.key === 'Escape') clear() }}
+        placeholder="Search events…"
+        className="border-none outline-none bg-transparent text-[12px] flex-1 min-w-0"
+        style={{ color: 'var(--text)' }}
+      />
+      {value && (
+        <button
+          onMouseDown={e => { e.preventDefault(); clear() }}
+          className="w-4 h-4 flex items-center justify-center rounded-full text-[9px] cursor-pointer border-none flex-shrink-0"
+          style={{ background: 'var(--text-faint)', color: 'var(--surface)' }}
+        >
+          ✕
+        </button>
       )}
     </div>
   )

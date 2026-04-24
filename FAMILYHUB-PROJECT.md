@@ -1,6 +1,6 @@
 # FamilyHub Calendar — Master Project Specification
 
-**Current state (2026-04-23):** Phase 3B Features 4–6 complete (Chores, Routines, Lists). UX polish commits done: Schedule view, DayCountPicker, InfoBar one-bar architecture. Feature 7 (Rewards) is next.  
+**Current state (2026-04-23):** Phase 3B Features 4–6 complete (Chores, Routines, Lists). All 4 calendar views now match Skylight (Month/Week/Schedule/Day). Visual overhaul done: event cards with title+time+avatar, side-by-side overlapping events, filter chip UI, FAB, SearchChip, month day popup. Next: 3B-GAP-A (Chore unskip).  
 **Detailed Phase 3 implementation specs:** see Claude Code memory → `phase3_implementation_plan.md`
 
 ---
@@ -72,12 +72,11 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 │  InfoBar (rendered by each Tab) — ONE bar:               │
 │  LEFT: date · time · weather   RIGHT: tab-specific ctrls │
 ├──────┬───────────────────────────────────────────────────┤
-│      │  [Profile chips strip — CalendarTab only]        │
 │ Nav  │                                                   │
 │ Side │          Active Tab content area                  │
 │ bar  │   Calendar / Tasks / Rewards / Meals /            │
 │ 72px │   Lists / Sleep                                   │
-│      │                                                   │
+│      │                           [FAB + bottom-right]   │
 └──────┴───────────────────────────────────────────────────┘
   landscape: sidebar left │ portrait/mobile: sidebar bottom (60px)
   mobile: InfoBar shows left side only; tab-specific controls hidden (md:hidden)
@@ -87,8 +86,8 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 
 | Tab | Content | Status |
 |---|---|---|
-| **Calendar** | Month / Schedule (1–7 days) / Day (mini-cal + event list) | ✅ Live |
-| **Tasks** | Chores + Routines (Day/Week view redesign pending) | ✅ Live (partial) |
+| **Calendar** | Month / **Week** (7-day card grid) / Schedule (1–7 days) / Day (mini-cal + event list) | ✅ Live (all 4 views) |
+| **Tasks** | Chores + Routines (Day/Week view redesign pending 3B-GAP-G/H/I) | ✅ Live (partial) |
 | **Rewards** | Stars + Reward redemption | Feature 7 next |
 | **Meals** | Meal planner + Recipe Box | Phase 3C |
 | **Lists** | Custom lists (To Do / Grocery / Other) | ✅ Live |
@@ -98,11 +97,16 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 ### Layout rules
 - **AppShell** owns: NavSidebar + tab switcher + `useScreenDim`. No TopBar — each tab renders its own InfoBar.
 - **InfoBar**: shared component — left side always shows date (Mon Apr 28) + time (10:51 AM) + weather. Right side (`rightSlot` prop) contains tab-specific controls, visible on desktop only (`hidden md:flex`). TopBar is deprecated.
-- **CalendarTab InfoBar right slot**: `[Schedule ▾] [Nd?] [⊞ Filter?] [<] [date range] [>] [Today] [Search] [+ Add]`. Profile chips are a separate strip below InfoBar (Skylight-accurate: chips are in tab content area, not info bar).
-- **TasksTab InfoBar right slot**: `[○ Day] [□ Week]` toggle (full layout redesign pending with Feature 7).
+- **CalendarTab InfoBar right slot**: `[dateRange label][spacer →][View▾][⊞ Filter][‹][Today][›][🔍]`. No pipe divider. dateRange label shows "April 2026" / "Apr 20–26" / "Monday, April 20" depending on view.
+- **CalendarTab Filter panel**: chip buttons for profiles (22px avatar circle + name, color-tinted when active) and calendar type text pill chips. No toggle switches. zIndex 9999.
+- **Profile chips strip**: REMOVED from CalendarTab. Profile filtering is via Filter panel only (Skylight-accurate: "Use the Filter button in the information bar to select which Profiles to show").
+- **FAB**: fixed `bottom-8 right-8 z-40`, 56px circle, accent color. Overlays calendar content.
+- **TasksTab InfoBar right slot**: `[○ Day] [□ Week]` toggle (full layout redesign pending 3B-GAP-G/H/I).
 - **NavSidebar**: CSS flex `order` trick — `order-first` landscape, `order-last` portrait. No `fixed` positioning.
 - `/settings` route kept separate (OAuth callbacks redirect there); Settings item is a `<Link>`.
 - Touch swipe left/right navigates dates on all calendar views.
+- **Event cards** (Schedule/Week/Day views): event title bold on top, time on second line, profile avatar circle on right. Skylight-parity visual.
+- **Month view desktop**: clicking a day cell opens floating `DayEventsPopup` card near the cell. Mobile: opens existing bottom sheet drawer.
 
 ---
 
@@ -208,7 +212,11 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 - [x] Feature 5: Routines (Morning/Afternoon/Evening blocks; daily auto-reset) — 2b1dd53
 - [x] Feature 6: Lists (To Do / Grocery / Other; subcategories; color-coded grid + detail view) — 86e5305
 - [x] UX-1: Calendar polish — Schedule view rename, DayCountPicker (1–7 days), single toolbar, touch swipe, h-full fixes — b1dd1d5
-- [x] UX-2: InfoBar one-bar architecture — Clock shows date+time, each tab renders own InfoBar, AppShell drops TopBar, profile chips moved to separate strip — d5b5d7d
+- [x] UX-2: InfoBar one-bar architecture — Clock shows date+time, each tab renders own InfoBar, AppShell drops TopBar — d5b5d7d
+- [x] UX-3: Day view rebuilt — DayView.tsx two-panel (mini-cal left + event list right) — f6da259
+- [x] UX-4: Week view + visual overhaul — CalendarWeekView.tsx (7-day card grid), event cards (title+time+avatar), side-by-side overlapping events, filter chip UI, FAB, SearchChip, month day popup, InfoBar date label — (pending commit)
+- [ ] 3B-GAP-A: Chore unskip API + UI ← **NEXT**
+- [ ] 3B-GAP-B through J: Chores/Routines fixes + TasksTab Day/Week redesign
 - [ ] Feature 7: Rewards / Stars (star balance per profile; reward redemption; celebration animation)
 
 **Phase 3C — Meals Expansion**
@@ -283,10 +291,11 @@ TalleyCalendar/
     │   │   ├── ListsTab.tsx           ← full lists; InfoBar with + New List right slot
     │   │   └── SleepTab.tsx           ← stub; InfoBar
     │   ├── calendar/
-    │   │   ├── MonthView.tsx
-    │   │   ├── WeekView.tsx           ← DraggableEventBlock + useDrag; drag-to-create removed
-    │   │   ├── DayView.tsx            ← replaced by rolling agenda in Phase 3A Feature 2
-    │   │   ├── AgendaSidebar.tsx      ← removed from layout (pre-Phase 3 #4); file exists
+    │   │   ├── MonthView.tsx          ← month grid; onDayClick(date,rect) → desktop popup or mobile sheet
+    │   │   ├── WeekView.tsx           ← Schedule view: DraggableEventBlock + useDrag; layoutDayEvents() side-by-side
+    │   │   ├── CalendarWeekView.tsx   ← NEW: Week view: 7-col card grid, events stacked (not time-positioned)
+    │   │   ├── DayView.tsx            ← Day view: mini-cal (left 38%) + event list (right)
+    │   │   ├── AgendaSidebar.tsx      ← DEPRECATED (pre-Phase 3 #4); file exists but unused
     │   │   ├── EventModal.tsx
     │   │   ├── EventDetailModal.tsx
     │   │   ├── MiniCalendar.tsx
