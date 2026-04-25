@@ -47,6 +47,7 @@ function choreIsActiveOnDate(chore: Chore, date: string): boolean {
 
   if (date < startDate) return false
   if (repeat.endDate && date > repeat.endDate) return false
+  if (chore.exceptions?.includes(date)) return false
 
   const d = new Date(date + 'T12:00:00')
   const s = new Date(startDate + 'T12:00:00')
@@ -187,6 +188,17 @@ export function TasksTab() {
     }
   }, [])
 
+  const handleUnskip = useCallback(async (choreId: string, date: string) => {
+    const res = await fetch(`/api/chores/${choreId}/unskip`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date }),
+    })
+    if (res.ok) {
+      setCompletions(prev => ({ ...prev, [choreId]: null }))
+    }
+  }, [])
+
   // ── Create / edit ───────────────────────────────────────────────────────
 
   const handleSaveChore = useCallback(async (data: ChoreFormData) => {
@@ -208,9 +220,13 @@ export function TasksTab() {
     await loadChores(viewDate)
   }, [editChore, viewDate, loadChores])
 
-  const handleDeleteChore = useCallback(async () => {
+  const handleDeleteChore = useCallback(async (scope: 'all' | 'this' | 'future', date?: string) => {
     if (!editChore) return
-    await fetch(`/api/chores/${editChore.id}`, { method: 'DELETE' })
+    await fetch(`/api/chores/${editChore.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope, date }),
+    })
     setEditChore(null)
     setShowForm(false)
     await loadChores(viewDate)
@@ -352,6 +368,7 @@ export function TasksTab() {
                         onComplete={handleComplete}
                         onUncomplete={handleUncomplete}
                         onSkip={handleSkip}
+                        onUnskip={handleUnskip}
                         onEdit={isAdmin ? openEdit : undefined}
                       />
                     ))}
@@ -372,6 +389,7 @@ export function TasksTab() {
                       onComplete={handleComplete}
                       onUncomplete={handleUncomplete}
                       onSkip={handleSkip}
+                      onUnskip={handleUnskip}
                       onEdit={isAdmin ? openEdit : undefined}
                     />
                   ))
@@ -420,6 +438,7 @@ export function TasksTab() {
         <ChoreForm
           chore={editChore ?? undefined}
           members={members}
+          viewDate={viewDate}
           onSave={handleSaveChore}
           onDelete={editChore ? handleDeleteChore : undefined}
           onClose={() => { setShowForm(false); setEditChore(null) }}

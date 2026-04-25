@@ -4,12 +4,15 @@ import { useState, useEffect } from 'react'
 import type { Chore, FamilyMember } from '@/lib/calendar/types'
 import { EmojiPicker } from './EmojiPicker'
 
+type DeleteScope = 'all' | 'this' | 'future'
+
 interface ChoreFormProps {
-  chore?:   Chore       // if provided → edit mode
-  members:  FamilyMember[]
-  onSave:   (data: ChoreFormData) => Promise<void>
-  onDelete?: () => Promise<void>
-  onClose:  () => void
+  chore?:    Chore       // if provided → edit mode
+  members:   FamilyMember[]
+  viewDate?: string      // YYYY-MM-DD — used for "delete this instance" scope
+  onSave:    (data: ChoreFormData) => Promise<void>
+  onDelete?: (scope: DeleteScope, date?: string) => Promise<void>
+  onClose:   () => void
 }
 
 export interface ChoreFormData {
@@ -30,7 +33,7 @@ export interface ChoreFormData {
 const STAR_PRESETS = [0, 5, 10, 25, 50, 100]
 const DAY_LABELS   = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 
-export function ChoreForm({ chore, members, onSave, onDelete, onClose }: ChoreFormProps) {
+export function ChoreForm({ chore, members, viewDate, onSave, onDelete, onClose }: ChoreFormProps) {
   const isEdit = !!chore
 
   const [title,      setTitle]      = useState(chore?.title ?? '')
@@ -48,8 +51,9 @@ export function ChoreForm({ chore, members, onSave, onDelete, onClose }: ChoreFo
   const [starValue,  setStarValue]  = useState(chore?.starValue ?? 0)
   const [customStar, setCustomStar] = useState('')
   const [showEmoji,  setShowEmoji]  = useState(false)
-  const [saving,     setSaving]     = useState(false)
-  const [deleting,   setDeleting]   = useState(false)
+  const [saving,          setSaving]          = useState(false)
+  const [deleting,        setDeleting]        = useState(false)
+  const [showScopeModal,  setShowScopeModal]  = useState(false)
 
   // Default today's date when date toggle is first enabled
   useEffect(() => {
@@ -97,12 +101,21 @@ export function ChoreForm({ chore, members, onSave, onDelete, onClose }: ChoreFo
     }
   }
 
-  const handleDelete = async () => {
+  const handleDeleteClick = () => {
     if (!onDelete || deleting) return
-    if (!confirm(`Delete "${chore?.title}"?`)) return
+    if (chore?.repeat) {
+      setShowScopeModal(true)
+    } else {
+      handleDeleteConfirm('all')
+    }
+  }
+
+  const handleDeleteConfirm = async (scope: DeleteScope) => {
+    if (!onDelete || deleting) return
+    setShowScopeModal(false)
     setDeleting(true)
     try {
-      await onDelete()
+      await onDelete(scope, viewDate)
       onClose()
     } finally {
       setDeleting(false)
@@ -350,7 +363,7 @@ export function ChoreForm({ chore, members, onSave, onDelete, onClose }: ChoreFo
           {isEdit && onDelete && (
             <button
               type="button"
-              onClick={handleDelete}
+              onClick={handleDeleteClick}
               disabled={deleting}
               style={{
                 padding: '12px 18px', borderRadius: 10, fontSize: 14, fontWeight: 600,
@@ -384,8 +397,87 @@ export function ChoreForm({ chore, members, onSave, onDelete, onClose }: ChoreFo
           </button>
         </div>
       </div>
+
+      {/* Delete scope modal (repeating chores only) */}
+      {showScopeModal && (
+        <>
+          <div
+            onClick={() => setShowScopeModal(false)}
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+              zIndex: 60,
+            }}
+          />
+          <div style={{
+            position: 'fixed',
+            top: '50%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 16,
+            padding: 24,
+            zIndex: 61,
+            width: 320,
+            maxWidth: 'calc(100vw - 32px)',
+            boxShadow: 'var(--shadow)',
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+              Delete repeating chore
+            </div>
+            <div style={{ fontSize: 14, color: 'var(--text-dim)', marginBottom: 20 }}>
+              This chore repeats. How would you like to delete it?
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {viewDate && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteConfirm('this')}
+                  style={scopeBtn}
+                >
+                  <span style={{ fontWeight: 600 }}>Just this time</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Remove from {viewDate} only</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleDeleteConfirm('future')}
+                style={scopeBtn}
+              >
+                <span style={{ fontWeight: 600 }}>This and all future</span>
+                <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Stop repeating from this date on</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteConfirm('all')}
+                style={{ ...scopeBtn, borderColor: 'rgba(255,60,60,0.3)', color: '#ff6060' }}
+              >
+                <span style={{ fontWeight: 600 }}>All occurrences</span>
+                <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Delete the chore entirely</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowScopeModal(false)}
+                style={{
+                  padding: '11px 0', borderRadius: 10, fontSize: 14, fontWeight: 500,
+                  background: 'none', border: '1px solid var(--border)',
+                  color: 'var(--text-dim)', cursor: 'pointer', marginTop: 4,
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </>
   )
+}
+
+const scopeBtn: React.CSSProperties = {
+  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
+  padding: '12px 16px', borderRadius: 10, width: '100%', textAlign: 'left',
+  background: 'var(--surface2)', border: '1px solid var(--border)',
+  color: 'var(--text)', cursor: 'pointer', fontSize: 14,
 }
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {

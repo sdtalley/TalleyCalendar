@@ -13,6 +13,7 @@ interface ChoreCardProps {
   onComplete:  (choreId: string, date: string, memberId?: string) => Promise<void>
   onUncomplete:(choreId: string, date: string) => Promise<void>
   onSkip:      (choreId: string, date: string, memberId?: string) => Promise<void>
+  onUnskip:    (choreId: string, date: string) => Promise<void>
   onEdit?:     (chore: Chore) => void
 }
 
@@ -26,6 +27,7 @@ export function ChoreCard({
   onComplete,
   onUncomplete,
   onSkip,
+  onUnskip,
   onEdit,
 }: ChoreCardProps) {
   const [celebrating, setCelebrating] = useState(false)
@@ -42,6 +44,8 @@ export function ChoreCard({
     try {
       if (completion?.status === 'complete') {
         await onUncomplete(chore.id, viewDate)
+      } else if (completion?.status === 'skipped') {
+        await onUnskip(chore.id, viewDate)
       } else {
         setCelebrating(true)
         await onComplete(chore.id, viewDate, currentMemberId ?? undefined)
@@ -50,7 +54,7 @@ export function ChoreCard({
     } finally {
       setBusy(false)
     }
-  }, [busy, completion, chore.id, viewDate, currentMemberId, onComplete, onUncomplete])
+  }, [busy, completion, chore.id, viewDate, currentMemberId, onComplete, onUncomplete, onUnskip])
 
   const handlePointerDown = useCallback(() => {
     longPressTimer.current = setTimeout(() => {

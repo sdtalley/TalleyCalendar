@@ -151,6 +151,7 @@ export interface Chore {
   date?: string             // YYYY-MM-DD; undefined = no specific date (always active)
   time?: string             // HH:MM; undefined = no specific time
   repeat?: ChoreRepeat
+  exceptions?: string[]     // YYYY-MM-DD dates excluded from a repeating chore
   starValue: number         // 0 = no stars
   createdAt: string         // ISO
   updatedAt: string         // ISO

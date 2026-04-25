@@ -215,8 +215,10 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 - [x] UX-2: InfoBar one-bar architecture — Clock shows date+time, each tab renders own InfoBar, AppShell drops TopBar — d5b5d7d
 - [x] UX-3: Day view rebuilt — DayView.tsx two-panel (mini-cal left + event list right) — f6da259
 - [x] UX-4: Week view + visual overhaul — CalendarWeekView.tsx (7-day card grid), event cards (title+time+avatar), side-by-side overlapping events, filter chip UI, FAB, SearchChip, month day popup, InfoBar date label — 33f2acf
-- [ ] 3B-GAP-A: Chore unskip API + UI ← **NEXT**
-- [ ] 3B-GAP-B through J: Chores/Routines fixes + TasksTab Day/Week redesign
+- [x] 3B-GAP-A: Chore unskip — `POST /api/chores/[id]/unskip` + circle-click on skipped → unskip
+- [x] 3B-GAP-B: Chore delete scope — repeating chores show 3-option modal (this/future/all); `exceptions[]` field; API handles scope in DELETE body
+- [ ] 3B-GAP-C: Routine timeBlock → timeBlocks[] migration ← **NEXT**
+- [ ] 3B-GAP-D through J: Routines fixes + TasksTab Day/Week redesign
 - [ ] Feature 7: Rewards / Stars (star balance per profile; reward redemption; celebration animation)
 
 **Phase 3C — Meals Expansion**
