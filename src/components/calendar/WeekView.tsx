@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDrag } from '@use-gesture/react'
-import { getWeekDates, sameDay, eventSpansDay, hexToRgba, formatTime, formatTimeRange } from '@/lib/utils'
+import { sameDay, eventSpansDay, hexToRgba, formatTime, formatTimeRange } from '@/lib/utils'
 import type { CalendarEvent, FamilyMemberUI } from '@/lib/calendar/types'
 
 function getMemberInitials(name: string): string {
@@ -258,7 +258,11 @@ function DraggableEventBlock({
 
 export function WeekView({ currentDate, events, familyMembers = [], onEventClick, onReschedule, numDays = 7 }: WeekViewProps) {
   const today = new Date()
-  const weekDates = getWeekDates(currentDate).slice(0, numDays)
+  const weekDates = Array.from({ length: numDays }, (_, i) => {
+    const d = new Date(currentDate)
+    d.setDate(d.getDate() + i)
+    return d
+  })
   const bodyRef = useRef<HTMLDivElement>(null)
   const columnRefs = useRef<(HTMLDivElement | null)[]>([])
 
@@ -337,7 +341,7 @@ export function WeekView({ currentDate, events, familyMembers = [], onEventClick
           >
             all day
           </div>
-          {weekDates.map((day, di) => (
+          {weekDates.map((_day, di) => (
             <div
               key={di}
               className="flex flex-col gap-[2px] py-1 px-[2px]"

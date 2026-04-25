@@ -29,8 +29,14 @@ function getMemberAvatarContent(member: FamilyMember): string {
   return getMemberInitials(member.name)
 }
 
-function formatScheduleRange(currentDate: Date, numDays: number): string {
-  const dates = getWeekDates(currentDate).slice(0, numDays)
+function formatScheduleRange(currentDate: Date, numDays: number, snapToWeek = true): string {
+  const dates = snapToWeek
+    ? getWeekDates(currentDate).slice(0, numDays)
+    : Array.from({ length: numDays }, (_, i) => {
+        const d = new Date(currentDate)
+        d.setDate(d.getDate() + i)
+        return d
+      })
   const first = dates[0]
   const last = dates[dates.length - 1]
   const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -333,7 +339,7 @@ export function CalendarTab() {
   const dateLabel =
     view === 'day'      ? currentDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) :
     view === 'week'     ? formatScheduleRange(currentDate, 7) :
-    view === 'schedule' ? formatScheduleRange(currentDate, scheduleDays) :
+    view === 'schedule' ? formatScheduleRange(currentDate, scheduleDays, false) :
                           formatMonthYear(currentDate)
 
   // ── Render ─────────────────────────────────────────────────────────────────
