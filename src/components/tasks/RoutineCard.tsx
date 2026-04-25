@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import type { Routine, RoutineCompletion, FamilyMember } from '@/lib/calendar/types'
+import type { ReactNode } from 'react'
 
 const TIME_BLOCK_LABELS = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening' }
 const TIME_BLOCK_COLORS = { morning: '#fbbf24', afternoon: '#34d399', evening: '#818cf8' }
@@ -17,6 +18,7 @@ interface RoutineCardProps {
   onSkip:      (id: string, date: string, memberId?: string) => Promise<void>
   onUnskip:    (id: string, date: string) => Promise<void>
   onEdit?:     (routine: Routine) => void
+  dragHandle?: ReactNode
 }
 
 export function RoutineCard({
@@ -30,6 +32,7 @@ export function RoutineCard({
   onSkip,
   onUnskip,
   onEdit,
+  dragHandle,
 }: RoutineCardProps) {
   const [celebrating, setCelebrating] = useState(false)
   const [showSkipMenu, setShowSkipMenu] = useState(false)
@@ -98,6 +101,9 @@ export function RoutineCard({
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
     >
+      {/* Drag handle (admin only, injected from SortableBlock) */}
+      {dragHandle}
+
       {/* Emoji */}
       <div style={{ fontSize: 24, width: 32, textAlign: 'center', flexShrink: 0 }}>
         {routine.emoji ?? '🔄'}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type {
   Chore, ChoreCompletion,
   Routine, RoutineCompletion, RoutineTimeBlock,
@@ -602,6 +602,20 @@ function RoutinesView({ members, session, isAdmin }: RoutinesViewProps) {
 
   const openEdit = useCallback((r: Routine) => { setEditRoutine(r); setShowForm(true) }, [])
 
+  const handleReorderRoutine = useCallback(async (newBlockOrder: Routine[]) => {
+    const orderMap = new Map(newBlockOrder.map((r, i) => [r.id, i * 100]))
+    setRoutines(prev => prev.map(r => orderMap.has(r.id) ? { ...r, order: orderMap.get(r.id) } : r))
+    await Promise.all(
+      newBlockOrder.map((r, i) =>
+        fetch(`/api/routines/${r.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order: i * 100 }),
+        })
+      )
+    )
+  }, [])
+
   // ── Render ──────────────────────────────────────────────────────────────
 
   return (
@@ -699,21 +713,20 @@ function RoutinesView({ members, session, isAdmin }: RoutinesViewProps) {
                         {isAdmin && ' — tap + Add Routine'}
                       </div>
                     ) : (
-                      blockRoutines.map(r => (
-                        <RoutineCard
-                          key={r.id}
-                          routine={r}
-                          completion={completions[r.id] ?? null}
-                          members={members}
-                          viewDate={viewDate}
-                          currentMemberId={session?.memberId}
-                          onComplete={handleComplete}
-                          onUncomplete={handleUncomplete}
-                          onSkip={handleSkip}
-                          onUnskip={handleUnskip}
-                          onEdit={isAdmin ? openEdit : undefined}
-                        />
-                      ))
+                      <SortableBlock
+                        routines={blockRoutines}
+                        completions={completions}
+                        members={members}
+                        viewDate={viewDate}
+                        currentMemberId={session?.memberId}
+                        isAdmin={isAdmin}
+                        onComplete={handleComplete}
+                        onUncomplete={handleUncomplete}
+                        onSkip={handleSkip}
+                        onUnskip={handleUnskip}
+                        onEdit={isAdmin ? openEdit : undefined}
+                        onReorder={handleReorderRoutine}
+                      />
                     )}
                   </div>
                 )}
@@ -755,6 +768,126 @@ function RoutinesView({ members, session, isAdmin }: RoutinesViewProps) {
           onClose={() => { setShowForm(false); setEditRoutine(null) }}
         />
       )}
+    </div>
+  )
+}
+
+// ── SortableBlock — drag-to-reorder routine list within a time block ──────
+
+interface SortableBlockProps {
+  routines:        Routine[]
+  completions:     Record<string, RoutineCompletion | null>
+  members:         FamilyMember[]
+  viewDate:        string
+  currentMemberId: string | null | undefined
+  isAdmin:         boolean
+  onComplete:      (id: string, date: string, memberId?: string) => Promise<void>
+  onUncomplete:    (id: string, date: string) => Promise<void>
+  onSkip:          (id: string, date: string, memberId?: string) => Promise<void>
+  onUnskip:        (id: string, date: string) => Promise<void>
+  onEdit:          ((r: Routine) => void) | undefined
+  onReorder:       (newOrder: Routine[]) => void
+}
+
+const CARD_H = 76 // approx card height + gap — used for index estimation during drag
+
+function SortableBlock({
+  routines, completions, members, viewDate, currentMemberId,
+  isAdmin, onComplete, onUncomplete, onSkip, onUnskip, onEdit, onReorder,
+}: SortableBlockProps) {
+  const [items, setItems] = useState<Routine[]>(routines)
+  const [drag, setDrag] = useState<{ id: string; index: number; deltaY: number } | null>(null)
+  const itemsRef = useRef(items)
+
+  useEffect(() => { setItems(routines); itemsRef.current = routines }, [routines])
+
+  const startDrag = useCallback((e: React.PointerEvent, id: string, index: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startY = e.clientY
+    setDrag({ id, index, deltaY: 0 })
+
+    const onMove = (me: PointerEvent) => {
+      setDrag(prev => prev ? { ...prev, deltaY: me.clientY - startY } : null)
+    }
+
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove)
+      setDrag(cur => {
+        if (!cur) return null
+        const steps = Math.round(cur.deltaY / CARD_H)
+        const newIdx = Math.max(0, Math.min(itemsRef.current.length - 1, cur.index + steps))
+        if (newIdx !== cur.index) {
+          const next = [...itemsRef.current]
+          const [moved] = next.splice(cur.index, 1)
+          next.splice(newIdx, 0, moved)
+          itemsRef.current = next
+          setItems(next)
+          onReorder(next)
+        }
+        return null
+      })
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp, { once: true })
+  }, [onReorder])
+
+  const targetIdx = drag
+    ? Math.max(0, Math.min(items.length - 1, drag.index + Math.round(drag.deltaY / CARD_H)))
+    : null
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {items.map((r, i) => {
+        const isDragged = drag?.id === r.id
+        const showLine = targetIdx !== null && targetIdx === i && drag && drag.index !== i
+        return (
+          <div key={r.id}>
+            {showLine && drag!.index > i && (
+              <div style={{ height: 2, background: 'var(--accent)', borderRadius: 1, marginBottom: 6 }} />
+            )}
+            <div style={{
+              opacity: isDragged ? 0.45 : 1,
+              transform: isDragged ? `translateY(${drag!.deltaY}px)` : 'none',
+              position: isDragged ? 'relative' : undefined,
+              zIndex: isDragged ? 10 : 'auto',
+              transition: isDragged ? 'none' : 'opacity 0.1s',
+            }}>
+              <RoutineCard
+                routine={r}
+                completion={completions[r.id] ?? null}
+                members={members}
+                viewDate={viewDate}
+                currentMemberId={currentMemberId}
+                onComplete={onComplete}
+                onUncomplete={onUncomplete}
+                onSkip={onSkip}
+                onUnskip={onUnskip}
+                onEdit={onEdit}
+                dragHandle={isAdmin ? (
+                  <div
+                    onPointerDown={e => startDrag(e, r.id, i)}
+                    style={{
+                      cursor: isDragged ? 'grabbing' : 'grab',
+                      color: 'var(--text-faint)',
+                      fontSize: 18,
+                      lineHeight: 1,
+                      padding: '4px 4px 4px 0',
+                      userSelect: 'none',
+                      touchAction: 'none',
+                      flexShrink: 0,
+                    }}
+                  >⠿</div>
+                ) : undefined}
+              />
+            </div>
+            {showLine && drag!.index < i && (
+              <div style={{ height: 2, background: 'var(--accent)', borderRadius: 1, marginTop: 6 }} />
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
