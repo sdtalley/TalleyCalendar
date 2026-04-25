@@ -175,10 +175,11 @@ export interface Routine {
   timeBlocks: RoutineTimeBlock[]    // which time blocks this routine appears in (min 1)
   timeBlock?: RoutineTimeBlock      // legacy Redis field — always read timeBlocks (API normalizes)
   repeat: 'daily' | { weekly: number[] }  // days 0=Sun..6=Sat
+  endDate?: string      // YYYY-MM-DD; set by "delete future" scope to stop repeating
   starValue: number
-  order?: number       // display order within time block
-  createdAt: string    // ISO
-  updatedAt: string    // ISO
+  order?: number        // display order within time block
+  createdAt: string     // ISO
+  updatedAt: string     // ISO
 }
 
 export interface RoutineCompletion {

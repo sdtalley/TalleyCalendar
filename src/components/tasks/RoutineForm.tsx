@@ -14,11 +14,12 @@ export interface RoutineFormData {
 }
 
 interface RoutineFormProps {
-  routine?:  Routine
-  members:   FamilyMember[]
-  onSave:    (data: RoutineFormData) => Promise<void>
-  onDelete?: () => Promise<void>
-  onClose:   () => void
+  routine?:   Routine
+  members:    FamilyMember[]
+  viewDate?:  string
+  onSave:     (data: RoutineFormData) => Promise<void>
+  onDelete?:  (scope: 'future' | 'all', date?: string) => Promise<void>
+  onClose:    () => void
 }
 
 const TIME_BLOCKS = [
@@ -30,7 +31,7 @@ const TIME_BLOCKS = [
 const DAY_LABELS   = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 const STAR_PRESETS = [0, 5, 10, 25, 50, 100]
 
-export function RoutineForm({ routine, members, onSave, onDelete, onClose }: RoutineFormProps) {
+export function RoutineForm({ routine, members, viewDate, onSave, onDelete, onClose }: RoutineFormProps) {
   const isEdit = !!routine
 
   const initWeeklyDays = (): number[] => {
@@ -55,8 +56,9 @@ export function RoutineForm({ routine, members, onSave, onDelete, onClose }: Rou
   const [starValue,  setStarValue]  = useState(routine?.starValue ?? 0)
   const [customStar, setCustomStar] = useState('')
   const [showEmoji,  setShowEmoji]  = useState(false)
-  const [saving,     setSaving]     = useState(false)
-  const [deleting,   setDeleting]   = useState(false)
+  const [saving,         setSaving]         = useState(false)
+  const [deleting,       setDeleting]       = useState(false)
+  const [showScopeModal, setShowScopeModal] = useState(false)
 
   const toggleMember = (id: string) =>
     setMemberIds(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id])
@@ -83,11 +85,16 @@ export function RoutineForm({ routine, members, onSave, onDelete, onClose }: Rou
     }
   }
 
-  const handleDelete = async () => {
+  const handleDeleteClick = () => {
     if (!onDelete || deleting) return
-    if (!confirm(`Delete "${routine?.title}"?`)) return
+    setShowScopeModal(true)
+  }
+
+  const handleDeleteConfirm = async (scope: 'future' | 'all') => {
+    if (!onDelete || deleting) return
+    setShowScopeModal(false)
     setDeleting(true)
-    try { await onDelete(); onClose() }
+    try { await onDelete(scope, viewDate); onClose() }
     finally { setDeleting(false) }
   }
 
@@ -254,7 +261,7 @@ export function RoutineForm({ routine, members, onSave, onDelete, onClose }: Rou
           borderTop: '1px solid var(--border)',
         }}>
           {isEdit && onDelete && (
-            <button type="button" onClick={handleDelete} disabled={deleting} style={{
+            <button type="button" onClick={handleDeleteClick} disabled={deleting} style={{
               padding: '12px 18px', borderRadius: 10, fontSize: 14, fontWeight: 600,
               background: 'rgba(255,60,60,0.1)', border: '1px solid rgba(255,60,60,0.3)',
               color: '#ff6060', cursor: 'pointer',
@@ -276,6 +283,52 @@ export function RoutineForm({ routine, members, onSave, onDelete, onClose }: Rou
           </button>
         </div>
       </div>
+
+      {/* Delete scope modal */}
+      {showScopeModal && (
+        <>
+          <div
+            onClick={() => setShowScopeModal(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 60 }}
+          />
+          <div style={{
+            position: 'fixed', top: '50%', left: '50%',
+            transform: 'translate(-50%, -50%)',
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 16, padding: 24, zIndex: 61,
+            width: 300, maxWidth: 'calc(100vw - 32px)',
+            boxShadow: 'var(--shadow)',
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Delete routine</div>
+            <div style={{ fontSize: 14, color: 'var(--text-dim)', marginBottom: 20 }}>
+              How would you like to delete this routine?
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button type="button" onClick={() => handleDeleteConfirm('future')} style={routineScopeBtn}>
+                <span style={{ fontWeight: 600 }}>This and all future</span>
+                <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Stop from this date on</span>
+              </button>
+              <button type="button" onClick={() => handleDeleteConfirm('all')}
+                style={{ ...routineScopeBtn, borderColor: 'rgba(255,60,60,0.3)', color: '#ff6060' }}>
+                <span style={{ fontWeight: 600 }}>All occurrences</span>
+                <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>Delete the routine entirely</span>
+              </button>
+              <button type="button" onClick={() => setShowScopeModal(false)} style={{
+                padding: '11px 0', borderRadius: 10, fontSize: 14, fontWeight: 500,
+                background: 'none', border: '1px solid var(--border)',
+                color: 'var(--text-dim)', cursor: 'pointer', marginTop: 4,
+              }}>Cancel</button>
+            </div>
+          </div>
+        </>
+      )}
     </>
   )
+}
+
+const routineScopeBtn: React.CSSProperties = {
+  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2,
+  padding: '12px 16px', borderRadius: 10, width: '100%', textAlign: 'left',
+  background: 'var(--surface2)', border: '1px solid var(--border)',
+  color: 'var(--text)', cursor: 'pointer', fontSize: 14,
 }

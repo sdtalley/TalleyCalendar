@@ -218,8 +218,10 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 - [x] 3B-GAP-A: Chore unskip — `POST /api/chores/[id]/unskip` + circle-click on skipped → unskip
 - [x] 3B-GAP-B: Chore delete scope — repeating chores show 3-option modal (this/future/all); `exceptions[]` field; API handles scope in DELETE body
 - [x] 3B-GAP-C: Routine `timeBlocks[]` — multi-select per routine; GET normalizes old `timeBlock` records; form multi-select UI
-- [ ] 3B-GAP-D: Routine unskip API + UI ← **NEXT**
-- [ ] 3B-GAP-E through J: Routines delete scope + reorder + TasksTab Day/Week redesign
+- [x] 3B-GAP-D: Routine unskip — `POST /api/routines/[id]/unskip` + circle-click on skipped → unskip
+- [x] 3B-GAP-E: Routine delete scope — 2-option modal (future/all); `endDate` field; API handles scope in DELETE body
+- [ ] 3B-GAP-F: Routine reorder (long-press drag within time block) ← **NEXT**
+- [ ] 3B-GAP-G through J: TasksTab Day/Week redesign + Lists gap analysis
 - [ ] Feature 7: Rewards / Stars (star balance per profile; reward redemption; celebration animation)
 
 **Phase 3C — Meals Expansion**

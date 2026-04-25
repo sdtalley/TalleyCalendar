@@ -471,6 +471,7 @@ function getCurrentTimeBlock(): RoutineTimeBlock {
 }
 
 function routineIsActiveOnDate(routine: Routine, date: string): boolean {
+  if (routine.endDate && date > routine.endDate) return false
   if (routine.repeat === 'daily') return true
   const days = (routine.repeat as { weekly: number[] }).weekly
   const dow = new Date(date + 'T12:00:00').getDay()
@@ -560,6 +561,14 @@ function RoutinesView({ members, session, isAdmin }: RoutinesViewProps) {
     }
   }, [])
 
+  const handleUnskip = useCallback(async (id: string, date: string) => {
+    const res = await fetch(`/api/routines/${id}/unskip`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date }),
+    })
+    if (res.ok) setCompletions(prev => ({ ...prev, [id]: null }))
+  }, [])
+
   // ── Create / edit ───────────────────────────────────────────────────────
 
   const handleSaveRoutine = useCallback(async (data: RoutineFormData) => {
@@ -579,9 +588,13 @@ function RoutinesView({ members, session, isAdmin }: RoutinesViewProps) {
     await loadRoutines(viewDate)
   }, [editRoutine, viewDate, loadRoutines])
 
-  const handleDeleteRoutine = useCallback(async () => {
+  const handleDeleteRoutine = useCallback(async (scope: 'future' | 'all', date?: string) => {
     if (!editRoutine) return
-    await fetch(`/api/routines/${editRoutine.id}`, { method: 'DELETE' })
+    await fetch(`/api/routines/${editRoutine.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope, date }),
+    })
     setEditRoutine(null)
     setShowForm(false)
     await loadRoutines(viewDate)
@@ -697,6 +710,7 @@ function RoutinesView({ members, session, isAdmin }: RoutinesViewProps) {
                           onComplete={handleComplete}
                           onUncomplete={handleUncomplete}
                           onSkip={handleSkip}
+                          onUnskip={handleUnskip}
                           onEdit={isAdmin ? openEdit : undefined}
                         />
                       ))
@@ -735,6 +749,7 @@ function RoutinesView({ members, session, isAdmin }: RoutinesViewProps) {
         <RoutineForm
           routine={editRoutine ?? undefined}
           members={members}
+          viewDate={viewDate}
           onSave={handleSaveRoutine}
           onDelete={editRoutine ? handleDeleteRoutine : undefined}
           onClose={() => { setShowForm(false); setEditRoutine(null) }}

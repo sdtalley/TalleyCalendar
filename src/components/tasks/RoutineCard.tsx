@@ -15,6 +15,7 @@ interface RoutineCardProps {
   onComplete:  (id: string, date: string, memberId?: string) => Promise<void>
   onUncomplete:(id: string, date: string) => Promise<void>
   onSkip:      (id: string, date: string, memberId?: string) => Promise<void>
+  onUnskip:    (id: string, date: string) => Promise<void>
   onEdit?:     (routine: Routine) => void
 }
 
@@ -27,6 +28,7 @@ export function RoutineCard({
   onComplete,
   onUncomplete,
   onSkip,
+  onUnskip,
   onEdit,
 }: RoutineCardProps) {
   const [celebrating, setCelebrating] = useState(false)
@@ -45,6 +47,8 @@ export function RoutineCard({
     try {
       if (isComplete) {
         await onUncomplete(routine.id, viewDate)
+      } else if (isSkipped) {
+        await onUnskip(routine.id, viewDate)
       } else {
         setCelebrating(true)
         await onComplete(routine.id, viewDate, currentMemberId ?? undefined)
@@ -53,7 +57,7 @@ export function RoutineCard({
     } finally {
       setBusy(false)
     }
-  }, [busy, isComplete, routine.id, viewDate, currentMemberId, onComplete, onUncomplete])
+  }, [busy, isComplete, isSkipped, routine.id, viewDate, currentMemberId, onComplete, onUncomplete, onUnskip])
 
   const handlePointerDown = useCallback(() => {
     longPressTimer.current = setTimeout(() => setShowSkipMenu(true), 500)
