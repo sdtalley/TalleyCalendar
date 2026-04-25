@@ -150,7 +150,7 @@ export function RoutineCard({
         style={{
           width: 30, height: 30, borderRadius: '50%',
           border: isComplete ? 'none' : '2.5px solid var(--border)',
-          background: isComplete ? TIME_BLOCK_COLORS[routine.timeBlock] : 'transparent',
+          background: isComplete ? TIME_BLOCK_COLORS[(routine.timeBlocks?.[0] ?? routine.timeBlock) as keyof typeof TIME_BLOCK_COLORS ?? 'morning'] : 'transparent',
           cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0, fontSize: 14, transition: 'all 0.15s',
           color: isComplete ? '#fff' : 'transparent',
@@ -160,7 +160,7 @@ export function RoutineCard({
       </button>
 
       {/* Celebration burst */}
-      {celebrating && <MiniCelebration color={TIME_BLOCK_COLORS[routine.timeBlock]} />}
+      {celebrating && <MiniCelebration color={TIME_BLOCK_COLORS[(routine.timeBlocks?.[0] ?? routine.timeBlock) as keyof typeof TIME_BLOCK_COLORS ?? 'morning']} />}
 
       {/* Skip menu */}
       {showSkipMenu && (

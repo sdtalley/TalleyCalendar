@@ -172,7 +172,8 @@ export interface Routine {
   title: string
   emoji?: string
   memberIds: string[]
-  timeBlock: RoutineTimeBlock
+  timeBlocks: RoutineTimeBlock[]    // which time blocks this routine appears in (min 1)
+  timeBlock?: RoutineTimeBlock      // legacy Redis field — always read timeBlocks (API normalizes)
   repeat: 'daily' | { weekly: number[] }  // days 0=Sun..6=Sat
   starValue: number
   order?: number       // display order within time block

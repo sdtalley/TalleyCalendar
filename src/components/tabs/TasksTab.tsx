@@ -635,7 +635,7 @@ function RoutinesView({ members, session, isAdmin }: RoutinesViewProps) {
         ) : (
           TIME_BLOCKS.map(block => {
             const blockRoutines = visibleRoutines
-              .filter(r => r.timeBlock === block.id)
+              .filter(r => (r.timeBlocks ?? (r.timeBlock ? [r.timeBlock] : [])).includes(block.id))
               .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.title.localeCompare(b.title))
             const isCurrent  = block.id === currentBlock && viewDate === t
             const isCollapsed = collapsed.has(block.id)

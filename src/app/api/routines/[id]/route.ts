@@ -3,16 +3,16 @@ import { getRoutine, updateRoutine, deleteRoutine } from '@/lib/redis'
 import { parseBody, z } from '@/lib/validate'
 
 const PatchSchema = z.object({
-  title:     z.string().min(1).optional(),
-  emoji:     z.string().optional(),
-  memberIds: z.array(z.string()).min(1).optional(),
-  timeBlock: z.enum(['morning', 'afternoon', 'evening']).optional(),
-  repeat:    z.union([
+  title:      z.string().min(1).optional(),
+  emoji:      z.string().optional(),
+  memberIds:  z.array(z.string()).min(1).optional(),
+  timeBlocks: z.array(z.enum(['morning', 'afternoon', 'evening'])).min(1).optional(),
+  repeat:     z.union([
     z.literal('daily'),
     z.object({ weekly: z.array(z.number().int().min(0).max(6)) }),
   ]).optional(),
-  starValue: z.number().int().min(0).optional(),
-  order:     z.number().int().optional(),
+  starValue:  z.number().int().min(0).optional(),
+  order:      z.number().int().optional(),
 })
 
 // PATCH /api/routines/[id] — admin only

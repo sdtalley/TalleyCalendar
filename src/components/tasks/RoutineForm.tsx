@@ -5,12 +5,12 @@ import type { Routine, FamilyMember } from '@/lib/calendar/types'
 import { EmojiPicker } from './EmojiPicker'
 
 export interface RoutineFormData {
-  title:     string
-  emoji?:    string
-  memberIds: string[]
-  timeBlock: 'morning' | 'afternoon' | 'evening'
-  repeat:    'daily' | { weekly: number[] }
-  starValue: number
+  title:      string
+  emoji?:     string
+  memberIds:  string[]
+  timeBlocks: ('morning' | 'afternoon' | 'evening')[]
+  repeat:     'daily' | { weekly: number[] }
+  starValue:  number
 }
 
 interface RoutineFormProps {
@@ -38,10 +38,16 @@ export function RoutineForm({ routine, members, onSave, onDelete, onClose }: Rou
     return typeof routine.repeat === 'object' ? routine.repeat.weekly : []
   }
 
+  const initTimeBlocks = (): ('morning' | 'afternoon' | 'evening')[] => {
+    if (!routine) return ['morning']
+    if (routine.timeBlocks?.length) return routine.timeBlocks
+    return routine.timeBlock ? [routine.timeBlock] : ['morning']
+  }
+
   const [title,      setTitle]      = useState(routine?.title ?? '')
   const [emoji,      setEmoji]      = useState(routine?.emoji ?? '')
   const [memberIds,  setMemberIds]  = useState<string[]>(routine?.memberIds ?? [])
-  const [timeBlock,  setTimeBlock]  = useState<'morning'|'afternoon'|'evening'>(routine?.timeBlock ?? 'morning')
+  const [timeBlocks, setTimeBlocks] = useState<('morning' | 'afternoon' | 'evening')[]>(initTimeBlocks)
   const [repeatType, setRepeatType] = useState<'daily'|'weekly'>(
     routine?.repeat === 'daily' || !routine ? 'daily' : 'weekly'
   )
@@ -55,6 +61,12 @@ export function RoutineForm({ routine, members, onSave, onDelete, onClose }: Rou
   const toggleMember = (id: string) =>
     setMemberIds(prev => prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id])
 
+  const toggleTimeBlock = (id: 'morning' | 'afternoon' | 'evening') =>
+    setTimeBlocks(prev => {
+      if (prev.includes(id)) return prev.length === 1 ? prev : prev.filter(b => b !== id)
+      return [...prev, id]
+    })
+
   const toggleDay = (d: number) =>
     setWeeklyDays(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])
 
@@ -64,7 +76,7 @@ export function RoutineForm({ routine, members, onSave, onDelete, onClose }: Rou
     try {
       const repeat: 'daily' | { weekly: number[] } =
         repeatType === 'daily' ? 'daily' : { weekly: weeklyDays }
-      await onSave({ title: title.trim(), emoji: emoji || undefined, memberIds, timeBlock, repeat, starValue })
+      await onSave({ title: title.trim(), emoji: emoji || undefined, memberIds, timeBlocks, repeat, starValue })
       onClose()
     } finally {
       setSaving(false)
@@ -153,14 +165,17 @@ export function RoutineForm({ routine, members, onSave, onDelete, onClose }: Rou
             </div>
           </div>
 
-          {/* Time block */}
+          {/* Time blocks (multi-select) */}
           <div>
-            <div className="field-label" style={{ marginBottom: 10 }}>Time of day</div>
+            <div className="field-label" style={{ marginBottom: 4 }}>Time of day</div>
+            <div style={{ fontSize: 11, color: 'var(--text-faint)', marginBottom: 10 }}>
+              Select one or more — routine appears in each selected block
+            </div>
             <div style={{ display: 'flex', gap: 8 }}>
               {TIME_BLOCKS.map(({ id, label, sub, emoji: tbEmoji, color }) => {
-                const active = timeBlock === id
+                const active = timeBlocks.includes(id)
                 return (
-                  <button key={id} type="button" onClick={() => setTimeBlock(id)} style={{
+                  <button key={id} type="button" onClick={() => toggleTimeBlock(id)} style={{
                     flex: 1, padding: '12px 8px', borderRadius: 12,
                     background: active ? `${color}22` : 'var(--surface2)',
                     border: `2px solid ${active ? color : 'var(--border)'}`,
