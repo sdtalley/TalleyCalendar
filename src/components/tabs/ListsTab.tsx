@@ -237,8 +237,8 @@ function ListDetail({ list, onBack, onListUpdated, onEditList }: ListDetailProps
 
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', height: '100%',
-      background: 'var(--bg)', overflow: 'hidden',
+      display: 'flex', flexDirection: 'column', flex: 1,
+      background: 'var(--bg)', overflow: 'hidden', minHeight: 0,
     }}>
       {/* Header */}
       <div style={{
@@ -577,81 +577,67 @@ export function ListsTab() {
     setEditList(null)
   }, [editList, selectedId])
 
-  // ── Detail view ────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────
+  // InfoBar persists on both grid and detail views (consistent with all other tabs).
 
-  if (selectedList) {
-    return (
-      <>
-        <ListDetail
-          list={selectedList}
-          onBack={() => setSelectedId(null)}
-          onListUpdated={handleListUpdated}
-          onEditList={() => { setEditList(selectedList); setShowForm(true) }}
-        />
-        {showForm && (
-          <ListForm
-            list={editList ?? undefined}
-            onSave={handleSaveList}
-            onDelete={editList ? handleDeleteList : undefined}
-            onClose={() => { setShowForm(false); setEditList(null) }}
-          />
-        )}
-      </>
-    )
-  }
-
-  // ── Grid view ──────────────────────────────────────────────────────────
+  const rightSlot = !selectedList ? (
+    <button
+      type="button"
+      onClick={() => { setEditList(null); setShowForm(true) }}
+      className="flex items-center gap-1 rounded-[8px] text-sm font-semibold text-white border-none cursor-pointer"
+      style={{ padding: '6px 14px', background: 'var(--accent)' }}
+    >
+      + New List
+    </button>
+  ) : null
 
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', height: '100%',
       background: 'var(--bg)', overflow: 'hidden',
     }}>
-      <InfoBar
-        rightSlot={
-          <button
-            type="button"
-            onClick={() => { setEditList(null); setShowForm(true) }}
-            className="flex items-center gap-1 rounded-[8px] text-sm font-semibold text-white border-none cursor-pointer"
-            style={{ padding: '6px 14px', background: 'var(--accent)' }}
-          >
-            + New List
-          </button>
-        }
-      />
+      <InfoBar rightSlot={rightSlot} />
 
-      {/* Grid */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {loading ? (
-          <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 60 }}>Loading…</div>
-        ) : lists.length === 0 ? (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', gap: 12, marginTop: 80,
-            color: 'var(--text-dim)',
-          }}>
-            <span style={{ fontSize: 48 }}>📋</span>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>No lists yet</div>
-            <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>
-              Tap + New List to create a shopping list, to-do, or anything else
+      {selectedList ? (
+        <ListDetail
+          list={selectedList}
+          onBack={() => setSelectedId(null)}
+          onListUpdated={handleListUpdated}
+          onEditList={() => { setEditList(selectedList); setShowForm(true) }}
+        />
+      ) : (
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+          {loading ? (
+            <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 60 }}>Loading…</div>
+          ) : lists.length === 0 ? (
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', gap: 12, marginTop: 80,
+              color: 'var(--text-dim)',
+            }}>
+              <span style={{ fontSize: 48 }}>📋</span>
+              <div style={{ fontSize: 16, fontWeight: 600 }}>No lists yet</div>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>
+                Tap + New List to create a shopping list, to-do, or anything else
+              </div>
             </div>
-          </div>
-        ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-            gap: 14,
-          }}>
-            {lists.map(list => (
-              <ListCard
-                key={list.id}
-                list={list}
-                onClick={() => setSelectedId(list.id)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gap: 14,
+            }}>
+              {lists.map(list => (
+                <ListCard
+                  key={list.id}
+                  list={list}
+                  onClick={() => setSelectedId(list.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {showForm && (
         <ListForm
