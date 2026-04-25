@@ -1,32 +1,28 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
-import type {
-  Chore, ChoreCompletion,
-  Routine, RoutineCompletion, RoutineTimeBlock,
-  FamilyMember, SessionPayload,
-} from '@/lib/calendar/types'
+import { useState, useEffect, useCallback } from 'react'
+import type { Chore, Routine, FamilyMember, SessionPayload } from '@/lib/calendar/types'
 import { InfoBar } from '@/components/layout/InfoBar'
-import { ChoreCard } from '@/components/tasks/ChoreCard'
 import { ChoreForm, type ChoreFormData } from '@/components/tasks/ChoreForm'
-import { RoutineCard } from '@/components/tasks/RoutineCard'
 import { RoutineForm, type RoutineFormData } from '@/components/tasks/RoutineForm'
+import { TasksDayView } from '@/components/tasks/TasksDayView'
+import { TasksWeekView } from '@/components/tasks/TasksWeekView'
 
-type SubTab = 'chores' | 'routines'
+type TaskView = 'day' | 'week'
 
-// ── Date helpers ──────────────────────────────────────────────────────────
+// ── Date helpers ──────────────────────────────────────────────────────────────
 
-function today() {
+function today(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function offsetDate(base: string, days: number) {
+function offsetDate(base: string, days: number): string {
   const d = new Date(base + 'T12:00:00')
   d.setDate(d.getDate() + days)
   return d.toISOString().slice(0, 10)
 }
 
-function formatViewDate(date: string) {
+function formatViewDate(date: string): string {
   const d = new Date(date + 'T12:00:00')
   const t = today()
   if (date === t) return 'Today'
@@ -35,65 +31,36 @@ function formatViewDate(date: string) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
-// ── Which chores are active on a given date ───────────────────────────────
-
-function choreIsActiveOnDate(chore: Chore, date: string): boolean {
-  if (!chore.date && !chore.repeat) return true  // undated, always show
-
-  const { repeat } = chore
-  const startDate = chore.date ?? chore.createdAt.slice(0, 10)
-
-  if (!repeat) return chore.date === date
-
-  if (date < startDate) return false
-  if (repeat.endDate && date > repeat.endDate) return false
-  if (chore.exceptions?.includes(date)) return false
-
-  const d = new Date(date + 'T12:00:00')
-  const s = new Date(startDate + 'T12:00:00')
-  const dayDiff = Math.round((d.getTime() - s.getTime()) / 86_400_000)
-
-  switch (repeat.frequency) {
-    case 'daily':
-      return dayDiff % repeat.interval === 0
-
-    case 'weekly': {
-      const weekDiff = Math.floor(dayDiff / 7)
-      if (weekDiff % repeat.interval !== 0) return false
-      if (repeat.daysOfWeek && repeat.daysOfWeek.length > 0) {
-        return repeat.daysOfWeek.includes(d.getDay())
-      }
-      return d.getDay() === s.getDay()
-    }
-
-    case 'monthly': {
-      const monthDiff = (d.getFullYear() - s.getFullYear()) * 12 + (d.getMonth() - s.getMonth())
-      if (monthDiff % repeat.interval !== 0) return false
-      return d.getDate() === s.getDate()
-    }
-
-    default:
-      return false
-  }
+function getWeekRange(viewDate: string): string {
+  const d = new Date(viewDate + 'T12:00:00')
+  const dow = d.getDay()
+  const mondayOffset = dow === 0 ? -6 : 1 - dow
+  const monday = new Date(d)
+  monday.setDate(d.getDate() + mondayOffset)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+  return `${monday.toLocaleDateString('en-US', opts)} – ${sunday.getDate()}`
 }
 
-// ── Component ─────────────────────────────────────────────────────────────
+// ── TasksTab ──────────────────────────────────────────────────────────────────
 
 export function TasksTab() {
-  const [subTab,      setSubTab]      = useState<SubTab>('chores')
-  const [viewDate,    setViewDate]    = useState(today)
-  const [chores,      setChores]      = useState<Chore[]>([])
-  const [completions, setCompletions] = useState<Record<string, ChoreCompletion | null>>({})
-  const [members,     setMembers]     = useState<FamilyMember[]>([])
-  const [session,     setSession]     = useState<SessionPayload | null>(null)
-  const [filterIds,   setFilterIds]   = useState<string[]>([])   // empty = all
-  const [loading,     setLoading]     = useState(true)
-  const [showForm,    setShowForm]    = useState(false)
-  const [editChore,   setEditChore]   = useState<Chore | null>(null)
+  const [taskView,        setTaskView]        = useState<TaskView>('day')
+  const [viewDate,        setViewDate]        = useState(today)
+  const [members,         setMembers]         = useState<FamilyMember[]>([])
+  const [session,         setSession]         = useState<SessionPayload | null>(null)
+  const [filterIds,       setFilterIds]       = useState<string[]>([])
+  const [showFilter,      setShowFilter]      = useState(false)
+  const [refreshKey,      setRefreshKey]      = useState(0)
+  const [showChoreForm,   setShowChoreForm]   = useState(false)
+  const [editChore,       setEditChore]       = useState<Chore | null>(null)
+  const [showRoutineForm, setShowRoutineForm] = useState(false)
+  const [editRoutine,     setEditRoutine]     = useState<Routine | null>(null)
 
   const isAdmin = session?.role === 'admin'
+  const t = today()
 
-  // Load session + members once
   useEffect(() => {
     Promise.all([
       fetch('/api/auth/me').then(r => r.ok ? r.json() : null),
@@ -104,472 +71,41 @@ export function TasksTab() {
     })
   }, [])
 
-  // Load chores + completions whenever viewDate changes
-  const loadChores = useCallback(async (date: string) => {
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/chores?date=${date}`)
-      if (res.ok) {
-        const { chores: c, completions: comp } = await res.json()
-        setChores(c)
-        setCompletions(comp)
-      }
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const refresh = () => setRefreshKey(k => k + 1)
 
-  useEffect(() => { loadChores(viewDate) }, [viewDate, loadChores])
+  const navigate = useCallback((direction: -1 | 1) => {
+    setViewDate(d => offsetDate(d, taskView === 'week' ? 7 * direction : direction))
+  }, [taskView])
 
-  // ── Filter logic ────────────────────────────────────────────────────────
-
-  const toggleFilter = (id: string) => {
-    setFilterIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    )
-  }
-
-  const visibleChores = chores.filter(c => {
-    if (filterIds.length > 0 && !c.memberIds.some(id => filterIds.includes(id))) return false
-    return true
-  })
-
-  const t = today()
-  const activeChores  = visibleChores.filter(c => choreIsActiveOnDate(c, viewDate))
-  const overdueChores = visibleChores.filter(c =>
-    c.date && c.date < viewDate && !choreIsActiveOnDate(c, viewDate) && !completions[c.id]
-  )
-
-  // Sort active: incomplete → complete; by time if set
-  const sortedActive = [...activeChores].sort((a, b) => {
-    const aDone = !!completions[a.id]
-    const bDone = !!completions[b.id]
-    if (aDone !== bDone) return aDone ? 1 : -1
-    if (a.time && b.time) return a.time.localeCompare(b.time)
-    if (a.time) return -1
-    if (b.time) return 1
-    return a.title.localeCompare(b.title)
-  })
-
-  // ── Completion actions ──────────────────────────────────────────────────
-
-  const handleComplete = useCallback(async (choreId: string, date: string, memberId?: string) => {
-    const res = await fetch(`/api/chores/${choreId}/complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, memberId }),
-    })
-    if (res.ok) {
-      const { completion } = await res.json()
-      setCompletions(prev => ({ ...prev, [choreId]: completion }))
-    }
-  }, [])
-
-  const handleUncomplete = useCallback(async (choreId: string, date: string) => {
-    const res = await fetch(`/api/chores/${choreId}/complete`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date }),
-    })
-    if (res.ok) {
-      setCompletions(prev => ({ ...prev, [choreId]: null }))
-    }
-  }, [])
-
-  const handleSkip = useCallback(async (choreId: string, date: string, memberId?: string) => {
-    const res = await fetch(`/api/chores/${choreId}/skip`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, memberId }),
-    })
-    if (res.ok) {
-      const { completion } = await res.json()
-      setCompletions(prev => ({ ...prev, [choreId]: completion }))
-    }
-  }, [])
-
-  const handleUnskip = useCallback(async (choreId: string, date: string) => {
-    const res = await fetch(`/api/chores/${choreId}/unskip`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date }),
-    })
-    if (res.ok) {
-      setCompletions(prev => ({ ...prev, [choreId]: null }))
-    }
-  }, [])
-
-  // ── Create / edit ───────────────────────────────────────────────────────
+  // ── Form handlers ─────────────────────────────────────────────────────────
 
   const handleSaveChore = useCallback(async (data: ChoreFormData) => {
     if (editChore) {
       await fetch(`/api/chores/${editChore.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
     } else {
       await fetch('/api/chores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
     }
     setEditChore(null)
-    setShowForm(false)
-    await loadChores(viewDate)
-  }, [editChore, viewDate, loadChores])
+    setShowChoreForm(false)
+    refresh()
+  }, [editChore])
 
   const handleDeleteChore = useCallback(async (scope: 'all' | 'this' | 'future', date?: string) => {
     if (!editChore) return
     await fetch(`/api/chores/${editChore.id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scope, date }),
     })
     setEditChore(null)
-    setShowForm(false)
-    await loadChores(viewDate)
-  }, [editChore, viewDate, loadChores])
-
-  const openEdit = useCallback((chore: Chore) => {
-    setEditChore(chore)
-    setShowForm(true)
-  }, [])
-
-  // ── Render ──────────────────────────────────────────────────────────────
-
-  // Tasks Day/Week toggle for InfoBar right slot (placeholder — full redesign with Feature 7)
-  const tasksRightSlot = (
-    <>
-      <button
-        className="flex items-center gap-1 px-3 py-1.5 rounded-[8px] text-[12px] font-semibold border-none cursor-pointer"
-        style={{ background: 'var(--accent)', color: '#fff' }}
-      >
-        ○ Day
-      </button>
-      <button
-        className="flex items-center gap-1 px-3 py-1.5 rounded-[8px] text-[12px] font-medium border-none cursor-pointer"
-        style={{ background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--text-dim)' }}
-      >
-        □ Week
-      </button>
-    </>
-  )
-
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden',
-      background: 'var(--bg)',
-    }}>
-      {/* InfoBar — shared date/time/weather + tasks-specific controls */}
-      <InfoBar rightSlot={tasksRightSlot} />
-
-      {/* Sub-nav: Chores | Routines */}
-      <div style={{
-        display: 'flex', gap: 0, borderBottom: '1px solid var(--border)',
-        background: 'var(--surface)', flexShrink: 0,
-      }}>
-        {(['chores', 'routines'] as SubTab[]).map(tab => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setSubTab(tab)}
-            style={{
-              padding: '12px 24px', fontSize: 14, fontWeight: subTab === tab ? 600 : 400,
-              color: subTab === tab ? 'var(--accent)' : 'var(--text-dim)',
-              background: 'none', border: 'none', cursor: 'pointer',
-              borderBottom: subTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
-              marginBottom: -1, textTransform: 'capitalize', transition: 'color 0.15s',
-            }}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      {subTab === 'routines' ? (
-        <RoutinesView
-          members={members}
-          session={session}
-          isAdmin={isAdmin}
-        />
-      ) : (
-        <>
-          {/* Date nav + member filter */}
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '10px 16px', borderBottom: '1px solid var(--border)',
-            background: 'var(--surface)', flexShrink: 0, gap: 12, flexWrap: 'wrap',
-          }}>
-            {/* Date navigation */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button type="button" onClick={() => setViewDate(d => offsetDate(d, -1))}
-                style={navBtn}>←</button>
-              <button
-                type="button"
-                onClick={() => setViewDate(today())}
-                style={{
-                  fontSize: 14, fontWeight: 600,
-                  color: viewDate === t ? 'var(--accent)' : 'var(--text)',
-                  background: 'none', border: 'none', cursor: 'pointer', minWidth: 100, textAlign: 'center',
-                }}
-              >
-                {formatViewDate(viewDate)}
-              </button>
-              <button type="button" onClick={() => setViewDate(d => offsetDate(d, 1))}
-                style={navBtn}>→</button>
-            </div>
-
-            {/* Member filter chips */}
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {members.map(m => {
-                const active = filterIds.includes(m.id)
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => toggleFilter(m.id)}
-                    style={{
-                      padding: '5px 10px', borderRadius: 16, fontSize: 12,
-                      background: active ? `${m.color}22` : 'var(--surface2)',
-                      border: `1.5px solid ${active ? m.color : 'var(--border)'}`,
-                      color: active ? m.color : 'var(--text-dim)',
-                      cursor: 'pointer', fontWeight: active ? 600 : 400,
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    {m.name}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Chore list */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {loading ? (
-              <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 40 }}>Loading…</div>
-            ) : (
-              <>
-                {/* Overdue section */}
-                {overdueChores.length > 0 && (
-                  <>
-                    <div className="section-title" style={{ color: '#f59e0b' }}>Overdue</div>
-                    {overdueChores.map(chore => (
-                      <ChoreCard
-                        key={chore.id}
-                        chore={chore}
-                        completion={completions[chore.id] ?? null}
-                        members={members}
-                        viewDate={viewDate}
-                        currentMemberId={session?.memberId}
-                        isOverdue
-                        onComplete={handleComplete}
-                        onUncomplete={handleUncomplete}
-                        onSkip={handleSkip}
-                        onUnskip={handleUnskip}
-                        onEdit={isAdmin ? openEdit : undefined}
-                      />
-                    ))}
-                    <div style={{ height: 8 }} />
-                  </>
-                )}
-
-                {/* Active chores */}
-                {sortedActive.length > 0 ? (
-                  sortedActive.map(chore => (
-                    <ChoreCard
-                      key={chore.id}
-                      chore={chore}
-                      completion={completions[chore.id] ?? null}
-                      members={members}
-                      viewDate={viewDate}
-                      currentMemberId={session?.memberId}
-                      onComplete={handleComplete}
-                      onUncomplete={handleUncomplete}
-                      onSkip={handleSkip}
-                      onUnskip={handleUnskip}
-                      onEdit={isAdmin ? openEdit : undefined}
-                    />
-                  ))
-                ) : (
-                  <div style={{
-                    flex: 1, display: 'flex', flexDirection: 'column',
-                    alignItems: 'center', justifyContent: 'center', gap: 8,
-                    color: 'var(--text-dim)', marginTop: 60,
-                  }}>
-                    <span style={{ fontSize: 48 }}>✅</span>
-                    <div style={{ fontSize: 16 }}>No chores for {formatViewDate(viewDate)}</div>
-                    {isAdmin && (
-                      <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>Tap + Add Chore to get started</div>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Add Chore button (admin only) */}
-          {isAdmin && (
-            <div style={{
-              padding: '12px 16px', borderTop: '1px solid var(--border)',
-              background: 'var(--surface)', flexShrink: 0,
-            }}>
-              <button
-                type="button"
-                onClick={() => { setEditChore(null); setShowForm(true) }}
-                style={{
-                  width: '100%', padding: '13px 0', borderRadius: 12,
-                  background: 'var(--accent)', border: 'none',
-                  color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer',
-                  boxShadow: '0 2px 12px rgba(108,140,255,0.3)',
-                }}
-              >
-                + Add Chore
-              </button>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Chore form modal */}
-      {showForm && (
-        <ChoreForm
-          chore={editChore ?? undefined}
-          members={members}
-          viewDate={viewDate}
-          onSave={handleSaveChore}
-          onDelete={editChore ? handleDeleteChore : undefined}
-          onClose={() => { setShowForm(false); setEditChore(null) }}
-        />
-      )}
-    </div>
-  )
-}
-
-const navBtn: React.CSSProperties = {
-  width: 32, height: 32, borderRadius: 8,
-  background: 'var(--surface2)', border: '1px solid var(--border)',
-  color: 'var(--text)', fontSize: 16, cursor: 'pointer',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-}
-
-// ── RoutinesView ──────────────────────────────────────────────────────────
-
-const TIME_BLOCKS: { id: RoutineTimeBlock; label: string; emoji: string; color: string; hours: string }[] = [
-  { id: 'morning',   label: 'Morning',   emoji: '🌅', color: '#fbbf24', hours: 'midnight – noon' },
-  { id: 'afternoon', label: 'Afternoon', emoji: '☀️', color: '#34d399', hours: 'noon – 6 pm' },
-  { id: 'evening',   label: 'Evening',   emoji: '🌙', color: '#818cf8', hours: '6 pm – midnight' },
-]
-
-function getCurrentTimeBlock(): RoutineTimeBlock {
-  const h = new Date().getHours()
-  if (h < 12) return 'morning'
-  if (h < 18) return 'afternoon'
-  return 'evening'
-}
-
-function routineIsActiveOnDate(routine: Routine, date: string): boolean {
-  if (routine.endDate && date > routine.endDate) return false
-  if (routine.repeat === 'daily') return true
-  const days = (routine.repeat as { weekly: number[] }).weekly
-  const dow = new Date(date + 'T12:00:00').getDay()
-  return days.includes(dow)
-}
-
-interface RoutinesViewProps {
-  members:  FamilyMember[]
-  session:  SessionPayload | null
-  isAdmin:  boolean
-}
-
-function RoutinesView({ members, session, isAdmin }: RoutinesViewProps) {
-  const [viewDate,    setViewDate]    = useState(today)
-  const [routines,    setRoutines]    = useState<Routine[]>([])
-  const [completions, setCompletions] = useState<Record<string, RoutineCompletion | null>>({})
-  const [loading,     setLoading]     = useState(true)
-  const [filterIds,   setFilterIds]   = useState<string[]>([])
-  const [collapsed,   setCollapsed]   = useState<Set<RoutineTimeBlock>>(new Set())
-  const [showForm,    setShowForm]    = useState(false)
-  const [editRoutine, setEditRoutine] = useState<Routine | null>(null)
-
-  const currentBlock = getCurrentTimeBlock()
-  const t = today()
-
-  const loadRoutines = useCallback(async (date: string) => {
-    setLoading(true)
-    try {
-      const res = await fetch(`/api/routines?date=${date}`)
-      if (res.ok) {
-        const { routines: r, completions: c } = await res.json()
-        setRoutines(r)
-        setCompletions(c)
-      }
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => { loadRoutines(viewDate) }, [viewDate, loadRoutines])
-
-  const toggleFilter = (id: string) =>
-    setFilterIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
-
-  const toggleCollapse = (block: RoutineTimeBlock) =>
-    setCollapsed(prev => {
-      const next = new Set(prev)
-      next.has(block) ? next.delete(block) : next.add(block)
-      return next
-    })
-
-  const visibleRoutines = routines.filter(r => {
-    if (!routineIsActiveOnDate(r, viewDate)) return false
-    if (filterIds.length > 0 && !r.memberIds.some(id => filterIds.includes(id))) return false
-    return true
-  })
-
-  // ── Completion actions ──────────────────────────────────────────────────
-
-  const handleComplete = useCallback(async (id: string, date: string, memberId?: string) => {
-    const res = await fetch(`/api/routines/${id}/complete`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, memberId }),
-    })
-    if (res.ok) {
-      const { completion } = await res.json()
-      setCompletions(prev => ({ ...prev, [id]: completion }))
-    }
-  }, [])
-
-  const handleUncomplete = useCallback(async (id: string, date: string) => {
-    const res = await fetch(`/api/routines/${id}/complete`, {
-      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date }),
-    })
-    if (res.ok) setCompletions(prev => ({ ...prev, [id]: null }))
-  }, [])
-
-  const handleSkip = useCallback(async (id: string, date: string, memberId?: string) => {
-    const res = await fetch(`/api/routines/${id}/skip`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date, memberId }),
-    })
-    if (res.ok) {
-      const { completion } = await res.json()
-      setCompletions(prev => ({ ...prev, [id]: completion }))
-    }
-  }, [])
-
-  const handleUnskip = useCallback(async (id: string, date: string) => {
-    const res = await fetch(`/api/routines/${id}/unskip`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date }),
-    })
-    if (res.ok) setCompletions(prev => ({ ...prev, [id]: null }))
-  }, [])
-
-  // ── Create / edit ───────────────────────────────────────────────────────
+    setShowChoreForm(false)
+    refresh()
+  }, [editChore])
 
   const handleSaveRoutine = useCallback(async (data: RoutineFormData) => {
     if (editRoutine) {
@@ -584,310 +120,223 @@ function RoutinesView({ members, session, isAdmin }: RoutinesViewProps) {
       })
     }
     setEditRoutine(null)
-    setShowForm(false)
-    await loadRoutines(viewDate)
-  }, [editRoutine, viewDate, loadRoutines])
+    setShowRoutineForm(false)
+    refresh()
+  }, [editRoutine])
 
   const handleDeleteRoutine = useCallback(async (scope: 'future' | 'all', date?: string) => {
     if (!editRoutine) return
     await fetch(`/api/routines/${editRoutine.id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scope, date }),
     })
     setEditRoutine(null)
-    setShowForm(false)
-    await loadRoutines(viewDate)
-  }, [editRoutine, viewDate, loadRoutines])
+    setShowRoutineForm(false)
+    refresh()
+  }, [editRoutine])
 
-  const openEdit = useCallback((r: Routine) => { setEditRoutine(r); setShowForm(true) }, [])
+  // ── InfoBar right slot ────────────────────────────────────────────────────
 
-  const handleReorderRoutine = useCallback(async (newBlockOrder: Routine[]) => {
-    const orderMap = new Map(newBlockOrder.map((r, i) => [r.id, i * 100]))
-    setRoutines(prev => prev.map(r => orderMap.has(r.id) ? { ...r, order: orderMap.get(r.id) } : r))
-    await Promise.all(
-      newBlockOrder.map((r, i) =>
-        fetch(`/api/routines/${r.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order: i * 100 }),
-        })
-      )
-    )
-  }, [])
+  const dateLabel = taskView === 'day' ? formatViewDate(viewDate) : getWeekRange(viewDate)
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  const tasksRightSlot = (
+    <>
+      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>
+        {dateLabel}
+      </span>
+      <div style={{ flex: 1 }} />
+
+      {/* Day / Week toggle */}
+      <div style={{
+        display: 'flex', gap: 2,
+        background: 'var(--surface2)', border: '1px solid var(--border)',
+        borderRadius: 8, padding: 2,
+      }}>
+        <button
+          type="button"
+          onClick={() => setTaskView('day')}
+          style={{
+            padding: '5px 12px', borderRadius: 6, fontSize: 12,
+            fontWeight: taskView === 'day' ? 600 : 400,
+            background: taskView === 'day' ? 'var(--accent)' : 'transparent',
+            color: taskView === 'day' ? '#fff' : 'var(--text-dim)',
+            border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+          }}
+        >○ Day</button>
+        <button
+          type="button"
+          onClick={() => setTaskView('week')}
+          style={{
+            padding: '5px 12px', borderRadius: 6, fontSize: 12,
+            fontWeight: taskView === 'week' ? 600 : 400,
+            background: taskView === 'week' ? 'var(--accent)' : 'transparent',
+            color: taskView === 'week' ? '#fff' : 'var(--text-dim)',
+            border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+          }}
+        >□ Week</button>
+      </div>
+
+      {/* Filter */}
+      <button
+        type="button"
+        onClick={() => setShowFilter(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 4,
+          padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+          background: showFilter || filterIds.length > 0 ? 'var(--accent)' : 'var(--surface2)',
+          color: showFilter || filterIds.length > 0 ? '#fff' : 'var(--text-dim)',
+          border: `1px solid ${showFilter || filterIds.length > 0 ? 'var(--accent)' : 'var(--border)'}`,
+          cursor: 'pointer',
+        }}
+      >
+        ⊞{filterIds.length > 0 ? ` (${filterIds.length})` : ' Filter'}
+      </button>
+
+      {/* Date nav */}
+      <button type="button" onClick={() => navigate(-1)} style={navBtnStyle}>‹</button>
+      <button
+        type="button"
+        onClick={() => setViewDate(today())}
+        style={{
+          padding: '6px 12px', borderRadius: 8, fontSize: 12,
+          fontWeight: viewDate === t ? 700 : 500,
+          background: 'var(--surface2)', border: '1px solid var(--border)',
+          color: viewDate === t ? 'var(--accent)' : 'var(--text-dim)',
+          cursor: 'pointer',
+        }}
+      >Today</button>
+      <button type="button" onClick={() => navigate(1)} style={navBtnStyle}>›</button>
+    </>
+  )
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Date nav + member filter */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '10px 16px', borderBottom: '1px solid var(--border)',
-        background: 'var(--surface)', flexShrink: 0, gap: 12, flexWrap: 'wrap',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button type="button" onClick={() => setViewDate(d => offsetDate(d, -1))} style={navBtn}>←</button>
-          <button type="button" onClick={() => setViewDate(today())} style={{
-            fontSize: 14, fontWeight: 600,
-            color: viewDate === t ? 'var(--accent)' : 'var(--text)',
-            background: 'none', border: 'none', cursor: 'pointer', minWidth: 100, textAlign: 'center',
-          }}>
-            {formatViewDate(viewDate)}
-          </button>
-          <button type="button" onClick={() => setViewDate(d => offsetDate(d, 1))} style={navBtn}>→</button>
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column', height: '100%',
+      overflow: 'hidden', background: 'var(--bg)',
+    }}>
+      <InfoBar rightSlot={tasksRightSlot} />
+
+      {/* Filter panel */}
+      {showFilter && (
+        <div style={{
+          display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center',
+          padding: '10px 16px', borderBottom: '1px solid var(--border)',
+          background: 'var(--surface)', flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 12, color: 'var(--text-dim)', fontWeight: 500 }}>Profiles:</span>
           {members.map(m => {
             const active = filterIds.includes(m.id)
             return (
-              <button key={m.id} type="button" onClick={() => toggleFilter(m.id)} style={{
-                padding: '5px 10px', borderRadius: 16, fontSize: 12,
-                background: active ? `${m.color}22` : 'var(--surface2)',
-                border: `1.5px solid ${active ? m.color : 'var(--border)'}`,
-                color: active ? m.color : 'var(--text-dim)',
-                cursor: 'pointer', fontWeight: active ? 600 : 400, transition: 'all 0.15s',
-              }}>
-                {m.name}
-              </button>
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setFilterIds(prev =>
+                  prev.includes(m.id) ? prev.filter(x => x !== m.id) : [...prev, m.id]
+                )}
+                style={{
+                  padding: '5px 10px', borderRadius: 16, fontSize: 12,
+                  background: active ? `${m.color}22` : 'var(--surface2)',
+                  border: `1.5px solid ${active ? m.color : 'var(--border)'}`,
+                  color: active ? m.color : 'var(--text-dim)',
+                  cursor: 'pointer', fontWeight: active ? 600 : 400,
+                }}
+              >{m.name}</button>
             )
           })}
+          {filterIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilterIds([])}
+              style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}
+            >Clear all</button>
+          )}
         </div>
-      </div>
+      )}
 
-      {/* Time block sections */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {loading ? (
-          <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 40 }}>Loading…</div>
-        ) : (
-          TIME_BLOCKS.map(block => {
-            const blockRoutines = visibleRoutines
-              .filter(r => (r.timeBlocks ?? (r.timeBlock ? [r.timeBlock] : [])).includes(block.id))
-              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.title.localeCompare(b.title))
-            const isCurrent  = block.id === currentBlock && viewDate === t
-            const isCollapsed = collapsed.has(block.id)
-            const doneCount  = blockRoutines.filter(r => completions[r.id]?.status === 'complete').length
-            const totalCount = blockRoutines.length
+      {/* Main view */}
+      {taskView === 'day' ? (
+        <TasksDayView
+          viewDate={viewDate}
+          members={members}
+          filterIds={filterIds}
+          session={session}
+          isAdmin={isAdmin}
+          refreshKey={refreshKey}
+          onEditChore={chore => { setEditChore(chore); setShowChoreForm(true) }}
+          onEditRoutine={routine => { setEditRoutine(routine); setShowRoutineForm(true) }}
+        />
+      ) : (
+        <TasksWeekView
+          viewDate={viewDate}
+          members={members}
+          filterIds={filterIds}
+          session={session}
+          isAdmin={isAdmin}
+          refreshKey={refreshKey}
+        />
+      )}
 
-            return (
-              <div key={block.id} style={{
-                background: 'var(--surface)',
-                border: `1px solid ${isCurrent ? block.color + '55' : 'var(--border)'}`,
-                borderRadius: 'var(--radius)',
-                overflow: 'hidden',
-                boxShadow: isCurrent ? `0 0 0 1px ${block.color}33` : 'none',
-              }}>
-                {/* Block header */}
-                <button
-                  type="button"
-                  onClick={() => toggleCollapse(block.id)}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '12px 14px', background: 'none', border: 'none', cursor: 'pointer',
-                    borderBottom: isCollapsed ? 'none' : '1px solid var(--border)',
-                  }}
-                >
-                  <span style={{ fontSize: 20 }}>{block.emoji}</span>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: isCurrent ? block.color : 'var(--text)' }}>
-                    {block.label}
-                  </span>
-                  <span style={{ fontSize: 12, color: 'var(--text-faint)', marginLeft: 2 }}>{block.hours}</span>
-                  {isCurrent && (
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, color: block.color,
-                      background: `${block.color}22`, padding: '2px 7px', borderRadius: 10,
-                    }}>NOW</span>
-                  )}
-                  <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-dim)' }}>
-                    {doneCount}/{totalCount}
-                  </span>
-                  <span style={{ color: 'var(--text-faint)', fontSize: 14 }}>{isCollapsed ? '▸' : '▾'}</span>
-                </button>
-
-                {/* Routine cards */}
-                {!isCollapsed && (
-                  <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {blockRoutines.length === 0 ? (
-                      <div style={{ color: 'var(--text-faint)', fontSize: 13, textAlign: 'center', padding: '8px 0' }}>
-                        No routines for {block.label.toLowerCase()}
-                        {isAdmin && ' — tap + Add Routine'}
-                      </div>
-                    ) : (
-                      <SortableBlock
-                        routines={blockRoutines}
-                        completions={completions}
-                        members={members}
-                        viewDate={viewDate}
-                        currentMemberId={session?.memberId}
-                        isAdmin={isAdmin}
-                        onComplete={handleComplete}
-                        onUncomplete={handleUncomplete}
-                        onSkip={handleSkip}
-                        onUnskip={handleUnskip}
-                        onEdit={isAdmin ? openEdit : undefined}
-                        onReorder={handleReorderRoutine}
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })
-        )}
-      </div>
-
-      {/* Add Routine button (admin only) */}
+      {/* Admin: add buttons */}
       {isAdmin && (
         <div style={{
-          padding: '12px 16px', borderTop: '1px solid var(--border)',
+          display: 'flex', gap: 8, padding: '12px 16px',
+          borderTop: '1px solid var(--border)',
           background: 'var(--surface)', flexShrink: 0,
         }}>
           <button
             type="button"
-            onClick={() => { setEditRoutine(null); setShowForm(true) }}
+            onClick={() => { setEditRoutine(null); setShowRoutineForm(true) }}
             style={{
-              width: '100%', padding: '13px 0', borderRadius: 12,
+              flex: 1, padding: '11px 0', borderRadius: 10,
+              background: 'var(--surface2)', border: '1px solid var(--border)',
+              color: 'var(--text-dim)', fontSize: 14, fontWeight: 500, cursor: 'pointer',
+            }}
+          >+ Routine</button>
+          <button
+            type="button"
+            onClick={() => { setEditChore(null); setShowChoreForm(true) }}
+            style={{
+              flex: 1, padding: '11px 0', borderRadius: 10,
               background: 'var(--accent)', border: 'none',
-              color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+              color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
               boxShadow: '0 2px 12px rgba(108,140,255,0.3)',
             }}
-          >
-            + Add Routine
-          </button>
+          >+ Chore</button>
         </div>
       )}
 
-      {/* Routine form modal */}
-      {showForm && (
+      {/* Forms */}
+      {showChoreForm && (
+        <ChoreForm
+          chore={editChore ?? undefined}
+          members={members}
+          viewDate={viewDate}
+          onSave={handleSaveChore}
+          onDelete={editChore ? handleDeleteChore : undefined}
+          onClose={() => { setShowChoreForm(false); setEditChore(null) }}
+        />
+      )}
+      {showRoutineForm && (
         <RoutineForm
           routine={editRoutine ?? undefined}
           members={members}
           viewDate={viewDate}
           onSave={handleSaveRoutine}
           onDelete={editRoutine ? handleDeleteRoutine : undefined}
-          onClose={() => { setShowForm(false); setEditRoutine(null) }}
+          onClose={() => { setShowRoutineForm(false); setEditRoutine(null) }}
         />
       )}
     </div>
   )
 }
 
-// ── SortableBlock — drag-to-reorder routine list within a time block ──────
+// ── Style constants ───────────────────────────────────────────────────────────
 
-interface SortableBlockProps {
-  routines:        Routine[]
-  completions:     Record<string, RoutineCompletion | null>
-  members:         FamilyMember[]
-  viewDate:        string
-  currentMemberId: string | null | undefined
-  isAdmin:         boolean
-  onComplete:      (id: string, date: string, memberId?: string) => Promise<void>
-  onUncomplete:    (id: string, date: string) => Promise<void>
-  onSkip:          (id: string, date: string, memberId?: string) => Promise<void>
-  onUnskip:        (id: string, date: string) => Promise<void>
-  onEdit:          ((r: Routine) => void) | undefined
-  onReorder:       (newOrder: Routine[]) => void
-}
-
-const CARD_H = 76 // approx card height + gap — used for index estimation during drag
-
-function SortableBlock({
-  routines, completions, members, viewDate, currentMemberId,
-  isAdmin, onComplete, onUncomplete, onSkip, onUnskip, onEdit, onReorder,
-}: SortableBlockProps) {
-  const [items, setItems] = useState<Routine[]>(routines)
-  const [drag, setDrag] = useState<{ id: string; index: number; deltaY: number } | null>(null)
-  const itemsRef = useRef(items)
-
-  useEffect(() => { setItems(routines); itemsRef.current = routines }, [routines])
-
-  const startDrag = useCallback((e: React.PointerEvent, id: string, index: number) => {
-    e.preventDefault()
-    e.stopPropagation()
-    const startY = e.clientY
-    setDrag({ id, index, deltaY: 0 })
-
-    const onMove = (me: PointerEvent) => {
-      setDrag(prev => prev ? { ...prev, deltaY: me.clientY - startY } : null)
-    }
-
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove)
-      setDrag(cur => {
-        if (!cur) return null
-        const steps = Math.round(cur.deltaY / CARD_H)
-        const newIdx = Math.max(0, Math.min(itemsRef.current.length - 1, cur.index + steps))
-        if (newIdx !== cur.index) {
-          const next = [...itemsRef.current]
-          const [moved] = next.splice(cur.index, 1)
-          next.splice(newIdx, 0, moved)
-          itemsRef.current = next
-          setItems(next)
-          onReorder(next)
-        }
-        return null
-      })
-    }
-
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp, { once: true })
-  }, [onReorder])
-
-  const targetIdx = drag
-    ? Math.max(0, Math.min(items.length - 1, drag.index + Math.round(drag.deltaY / CARD_H)))
-    : null
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {items.map((r, i) => {
-        const isDragged = drag?.id === r.id
-        const showLine = targetIdx !== null && targetIdx === i && drag && drag.index !== i
-        return (
-          <div key={r.id}>
-            {showLine && drag!.index > i && (
-              <div style={{ height: 2, background: 'var(--accent)', borderRadius: 1, marginBottom: 6 }} />
-            )}
-            <div style={{
-              opacity: isDragged ? 0.45 : 1,
-              transform: isDragged ? `translateY(${drag!.deltaY}px)` : 'none',
-              position: isDragged ? 'relative' : undefined,
-              zIndex: isDragged ? 10 : 'auto',
-              transition: isDragged ? 'none' : 'opacity 0.1s',
-            }}>
-              <RoutineCard
-                routine={r}
-                completion={completions[r.id] ?? null}
-                members={members}
-                viewDate={viewDate}
-                currentMemberId={currentMemberId}
-                onComplete={onComplete}
-                onUncomplete={onUncomplete}
-                onSkip={onSkip}
-                onUnskip={onUnskip}
-                onEdit={onEdit}
-                dragHandle={isAdmin ? (
-                  <div
-                    onPointerDown={e => startDrag(e, r.id, i)}
-                    style={{
-                      cursor: isDragged ? 'grabbing' : 'grab',
-                      color: 'var(--text-faint)',
-                      fontSize: 18,
-                      lineHeight: 1,
-                      padding: '4px 4px 4px 0',
-                      userSelect: 'none',
-                      touchAction: 'none',
-                      flexShrink: 0,
-                    }}
-                  >⠿</div>
-                ) : undefined}
-              />
-            </div>
-            {showLine && drag!.index < i && (
-              <div style={{ height: 2, background: 'var(--accent)', borderRadius: 1, marginTop: 6 }} />
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
+const navBtnStyle: React.CSSProperties = {
+  width: 30, height: 30, borderRadius: 8,
+  background: 'var(--surface2)', border: '1px solid var(--border)',
+  color: 'var(--text)', fontSize: 16, cursor: 'pointer',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
 }

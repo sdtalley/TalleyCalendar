@@ -1,6 +1,6 @@
 # FamilyHub Calendar — Master Project Specification
 
-**Current state (2026-04-23):** Phase 3B Features 4–6 complete (Chores, Routines, Lists). All 4 calendar views now match Skylight (Month/Week/Schedule/Day). Visual overhaul done: event cards with title+time+avatar, side-by-side overlapping events, filter chip UI, FAB, SearchChip, month day popup. Next: 3B-GAP-A (Chore unskip).  
+**Current state (2026-04-23):** Phase 3B Features 4–6 + GAPs A–I complete. All 4 calendar views match Skylight. TasksTab fully redesigned: Day view (multi-column per-profile, completion rings) + Week view (single-profile grid Mon–Sun, per-day checkboxes). Next: 3B-GAP-J (Lists gap analysis) → Feature 7 (Rewards/Stars).  
 **Detailed Phase 3 implementation specs:** see Claude Code memory → `phase3_implementation_plan.md`
 
 ---
@@ -87,7 +87,7 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 | Tab | Content | Status |
 |---|---|---|
 | **Calendar** | Month / **Week** (7-day card grid) / Schedule (1–7 days) / Day (mini-cal + event list) | ✅ Live (all 4 views) |
-| **Tasks** | Chores + Routines (Day/Week view redesign pending 3B-GAP-G/H/I) | ✅ Live (partial) |
+| **Tasks** | Chores + Routines — Day view (per-profile columns) + Week view (grid) | ✅ Live |
 | **Rewards** | Stars + Reward redemption | Feature 7 next |
 | **Meals** | Meal planner + Recipe Box | Phase 3C |
 | **Lists** | Custom lists (To Do / Grocery / Other) | ✅ Live |
@@ -101,7 +101,7 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 - **CalendarTab Filter panel**: chip buttons for profiles (22px avatar circle + name, color-tinted when active) and calendar type text pill chips. No toggle switches. zIndex 9999.
 - **Profile chips strip**: REMOVED from CalendarTab. Profile filtering is via Filter panel only (Skylight-accurate: "Use the Filter button in the information bar to select which Profiles to show").
 - **FAB**: fixed `bottom-8 right-8 z-40`, 56px circle, accent color. Overlays calendar content.
-- **TasksTab InfoBar right slot**: `[○ Day] [□ Week]` toggle (full layout redesign pending 3B-GAP-G/H/I).
+- **TasksTab InfoBar right slot**: `[dateLabel][spacer][○ Day][□ Week][⊞ Filter][‹][Today][›]` — Day/Week toggle pill, filter panel (per-profile chips), date nav. Day advances 1 day; Week advances 7 days.
 - **NavSidebar**: CSS flex `order` trick — `order-first` landscape, `order-last` portrait. No `fixed` positioning.
 - `/settings` route kept separate (OAuth callbacks redirect there); Settings item is a `<Link>`.
 - Touch swipe left/right navigates dates on all calendar views.
@@ -221,10 +221,10 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 - [x] 3B-GAP-D: Routine unskip — `POST /api/routines/[id]/unskip` + circle-click on skipped → unskip
 - [x] 3B-GAP-E: Routine delete scope — 2-option modal (future/all); `endDate` field; API handles scope in DELETE body
 - [x] 3B-GAP-F: Routine reorder — `⠿` drag handle (admin only); pointer-event drag; `SortableBlock` component; PATCH orders on drop
-- [ ] 3B-GAP-G: TasksTab Day view — multi-column per-profile layout ← **NEXT**
-- [ ] 3B-GAP-H: TasksTab Week view — single-profile grid
-- [ ] 3B-GAP-I: TasksTab InfoBar — Day/Week toggle + Filter + nav
-- [ ] 3B-GAP-J: Lists — Skylight gap analysis
+- [x] 3B-GAP-G: TasksTab Day view — `TasksDayView.tsx`: multi-column per-profile, completion rings, section toggle icons, compact TaskRow, Morning/Afternoon/Evening/Chores sections
+- [x] 3B-GAP-H: TasksTab Week view — `TasksWeekView.tsx`: profile selector chips, section filter icons, Mon–Sun grid, per-day completion circle cells
+- [x] 3B-GAP-I: TasksTab InfoBar — Day/Week toggle + ⊞ Filter (per-profile chips) + ‹ Today › nav; sub-tab strip removed
+- [ ] 3B-GAP-J: Lists — Skylight gap analysis ← **NEXT**
 - [ ] Feature 7: Rewards / Stars (star balance per profile; reward redemption; celebration animation)
 
 **Phase 3C — Meals Expansion**
@@ -293,7 +293,7 @@ TalleyCalendar/
     │   │   └── Sidebar.tsx            ← RETIRED (Phase 2.5); file kept
     │   ├── tabs/
     │   │   ├── CalendarTab.tsx        ← all calendar logic; InfoBar at top; profile chips strip; mobile sub-nav
-    │   │   ├── TasksTab.tsx           ← chores + routines; InfoBar with Day/Week placeholder
+    │   │   ├── TasksTab.tsx           ← InfoBar (Day/Week/Filter/nav) + TasksDayView + TasksWeekView + forms
     │   │   ├── RewardsTab.tsx         ← stub; InfoBar
     │   │   ├── MealsTab.tsx           ← stub; InfoBar
     │   │   ├── ListsTab.tsx           ← full lists; InfoBar with + New List right slot
