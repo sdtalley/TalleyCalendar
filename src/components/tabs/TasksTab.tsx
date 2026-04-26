@@ -62,7 +62,7 @@ export function TasksTab() {
   const isAdmin = session?.role === 'admin'
   const t = today()
 
-  const autoTick = useAutoRefresh()
+  const autoTick = useAutoRefresh(30_000)
 
   useEffect(() => {
     Promise.all([
