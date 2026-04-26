@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { CalendarEvent, FamilyMember } from '@/lib/calendar/types'
 
 const REFRESH_INTERVAL = 300_000  // 5 min polling
-const CACHE_TTL        = 300_000  // SWR revalidation threshold
-const EVICT_MONTHS     = 3        // drop cache entries this far from current view
-const PREFETCH_DELAY   = 500      // ms to wait after navigation before prefetching
+const EVICT_MONTHS     = 3        // drop in-memory cache entries beyond this distance
+const PREFETCH_DELAY   = 500      // ms after navigation before prefetching adjacent month
+const LS_CACHE_PREFIX  = 'cal-cache-'
+const LS_MEMBERS_KEY   = 'cal-members'
 
 type CacheEntry = { events: CalendarEvent[]; fetchedAt: number }
 
@@ -25,6 +26,45 @@ function shiftMonth(d: Date, delta: number) {
   return new Date(d.getFullYear(), d.getMonth() + delta, 1)
 }
 
+function hydrateEvents(raw: unknown[]): CalendarEvent[] {
+  return (raw ?? []).map((e: unknown) => {
+    const ev = e as CalendarEvent & { start: string; end: string }
+    return { ...ev, start: new Date(ev.start), end: new Date(ev.end) }
+  })
+}
+
+// ── localStorage helpers ────────────────────────────────────────────────────
+
+function lsReadCache(key: string): CacheEntry | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(LS_CACHE_PREFIX + key)
+    if (!raw) return null
+    const { events, fetchedAt } = JSON.parse(raw)
+    return { events: hydrateEvents(events), fetchedAt }
+  } catch { return null }
+}
+
+function lsWriteCache(key: string, events: CalendarEvent[], fetchedAt: number) {
+  try {
+    localStorage.setItem(LS_CACHE_PREFIX + key, JSON.stringify({ events, fetchedAt }))
+  } catch { /* storage quota */ }
+}
+
+function lsReadMembers(): FamilyMember[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(LS_MEMBERS_KEY)
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
+}
+
+function lsWriteMembers(members: FamilyMember[]) {
+  try { localStorage.setItem(LS_MEMBERS_KEY, JSON.stringify(members)) } catch { /* quota */ }
+}
+
+// ── Hook ────────────────────────────────────────────────────────────────────
+
 export interface UseCalendarEventsResult {
   events: CalendarEvent[]
   members: FamilyMember[]
@@ -35,36 +75,47 @@ export interface UseCalendarEventsResult {
 }
 
 export function useCalendarEvents(currentDate: Date): UseCalendarEventsResult {
-  const [events, setEvents]               = useState<CalendarEvent[]>([])
-  const [members, setMembers]             = useState<FamilyMember[]>([])
-  const [loading, setLoading]             = useState(true)
+  // Synchronous localStorage boot — these lazy inits run before first paint so
+  // there is no spinner flash when cached data is available.
+  const [lsBoot] = useState<{ key: string; entry: CacheEntry } | null>(() => {
+    const key = monthKey(new Date())
+    const entry = lsReadCache(key)
+    return entry ? { key, entry } : null
+  })
+
+  const [events, setEvents]               = useState<CalendarEvent[]>(() => lsBoot?.entry.events ?? [])
+  const [members, setMembers]             = useState<FamilyMember[]>(() => lsReadMembers())
+  const [loading, setLoading]             = useState<boolean>(!lsBoot)
   const [backgroundLoading, setBgLoading] = useState(false)
   const [error, setError]                 = useState<string | null>(null)
 
   const cache          = useRef<Map<string, CacheEntry>>(new Map())
+  const lsSeeded       = useRef(false)
   const inFlight       = useRef<Set<string>>(new Set())
-  const bgCount        = useRef(0)          // counter so overlapping fetches don't race on the shimmer
-  const hasBooted      = useRef(false)      // true once the first visible month has loaded
+  const bgCount        = useRef(0)
+  const hasBooted      = useRef(!!lsBoot)
   const prevDate       = useRef(currentDate)
   const currentDateRef = useRef(currentDate)
   const intervalRef    = useRef<ReturnType<typeof setInterval>>()
 
-  // Keep a ref in sync for use inside intervals / timeouts
+  // Seed in-memory cache from LS boot entry before first effect fires.
+  // Guarded by lsSeeded so this runs exactly once across all renders.
+  if (!lsSeeded.current && lsBoot) {
+    cache.current.set(lsBoot.key, lsBoot.entry)
+    lsSeeded.current = true
+  }
+
   useEffect(() => { currentDateRef.current = currentDate })
 
-  // ── shimmer counter helpers ─────────────────────────────────────────────
+  // ── shimmer counter ──────────────────────────────────────────────────────
 
-  const incBg = useCallback(() => {
-    bgCount.current++
-    setBgLoading(true)
-  }, [])
-
+  const incBg = useCallback(() => { bgCount.current++; setBgLoading(true) }, [])
   const decBg = useCallback(() => {
     bgCount.current = Math.max(0, bgCount.current - 1)
     if (bgCount.current === 0) setBgLoading(false)
   }, [])
 
-  // ── evict months too far from the current view ──────────────────────────
+  // ── evict distant months from in-memory cache ────────────────────────────
 
   const evict = useCallback((anchor: Date) => {
     for (const key of Array.from(cache.current.keys())) {
@@ -83,12 +134,10 @@ export function useCalendarEvents(currentDate: Date): UseCalendarEventsResult {
     const key    = monthKey(targetDate)
     const silent = opts.silent ?? false
 
-    // Silent fetches (prefetch / SWR revalidation) skip if already in-flight
     if (silent && inFlight.current.has(key)) return
-
     inFlight.current.add(key)
 
-    // Show shimmer only after initial boot (initial boot uses the full-page spinner)
+    // Shimmer only for non-silent fetches after initial boot
     if (!silent && hasBooted.current) incBg()
 
     const { start, end } = windowFor(targetDate)
@@ -100,16 +149,13 @@ export function useCalendarEvents(currentDate: Date): UseCalendarEventsResult {
       ])
 
       if (calRes.ok) {
-        const data     = await calRes.json()
-        const hydrated = (data.events ?? []).map((e: CalendarEvent) => ({
-          ...e,
-          start: new Date(e.start as unknown as string),
-          end:   new Date(e.end   as unknown as string),
-        }))
+        const data      = await calRes.json()
+        const hydrated  = hydrateEvents(data.events ?? [])
+        const fetchedAt = Date.now()
 
-        cache.current.set(key, { events: hydrated, fetchedAt: Date.now() })
+        cache.current.set(key, { events: hydrated, fetchedAt })
+        lsWriteCache(key, hydrated, fetchedAt)
 
-        // Only update displayed events if this is still the visible month
         if (monthKey(currentDateRef.current) === key) {
           setEvents(hydrated)
           setError(data.errors ? `${data.errors.length} account(s) had errors` : null)
@@ -118,7 +164,11 @@ export function useCalendarEvents(currentDate: Date): UseCalendarEventsResult {
         setError('Failed to fetch calendar events')
       }
 
-      if (memberRes.ok) setMembers(await memberRes.json())
+      if (memberRes.ok) {
+        const memberData = await memberRes.json()
+        setMembers(memberData)
+        lsWriteMembers(memberData)
+      }
     } catch (err) {
       if (monthKey(currentDateRef.current) === key) {
         setError(err instanceof Error ? err.message : 'Failed to fetch events')
@@ -127,7 +177,6 @@ export function useCalendarEvents(currentDate: Date): UseCalendarEventsResult {
       inFlight.current.delete(key)
       if (!silent && hasBooted.current) decBg()
 
-      // First time the currently-visible month finishes → dismiss full-page spinner
       if (!hasBooted.current && monthKey(currentDateRef.current) === key) {
         hasBooted.current = true
         setLoading(false)
@@ -135,39 +184,39 @@ export function useCalendarEvents(currentDate: Date): UseCalendarEventsResult {
     }
   }, [incBg, decBg])
 
-  // ── prefetch: silent, skips if cache is still fresh ────────────────────
+  // ── prefetch ─────────────────────────────────────────────────────────────
 
   const prefetch = useCallback((targetDate: Date) => {
-    const key   = monthKey(targetDate)
-    const entry = cache.current.get(key)
-    if (entry && Date.now() - entry.fetchedAt < CACHE_TTL) return
+    // Check both in-memory and localStorage before deciding to fetch
+    const key      = monthKey(targetDate)
+    const memEntry = cache.current.get(key)
+    if (memEntry) return  // already have it in memory (fresh or being revalidated)
+    const lsEntry  = lsReadCache(key)
+    if (lsEntry) { cache.current.set(key, lsEntry); return }  // seed from LS, skip network
     fetchForDate(targetDate, { silent: true })
   }, [fetchForDate])
 
-  // ── navigation: fires on mount and every time currentDate changes ───────
+  // ── navigation: runs on mount and every time currentDate changes ─────────
 
   useEffect(() => {
     const key   = monthKey(currentDate)
     const entry = cache.current.get(key)
-    const fresh = !!entry && Date.now() - entry.fetchedAt < CACHE_TTL
 
     evict(currentDate)
 
-    // Determine travel direction (default forward on first mount)
     const direction = currentDate >= prevDate.current ? 1 : -1
     prevDate.current = new Date(currentDate)
 
-    if (fresh) {
-      // Cache hit → instant display; silently revalidate in background (SWR)
+    if (entry) {
+      // Have cached data → show it immediately, revalidate silently (true SWR)
       setEvents(entry.events)
-      setLoading(false)
+      if (!hasBooted.current) { hasBooted.current = true; setLoading(false) }
       fetchForDate(currentDate, { silent: true })
     } else {
-      // Cache miss → fetch (fetchForDate will show the shimmer post-boot)
+      // Nothing cached → full fetch (shimmer overlay if already booted, spinner if first load)
       fetchForDate(currentDate)
     }
 
-    // After the user settles on this month, prefetch the next one in their direction
     const timer = setTimeout(
       () => prefetch(shiftMonth(currentDate, direction)),
       PREFETCH_DELAY,
@@ -175,13 +224,13 @@ export function useCalendarEvents(currentDate: Date): UseCalendarEventsResult {
     return () => clearTimeout(timer)
   }, [currentDate]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── post-boot: immediately prefetch the next month forward ──────────────
+  // ── post-boot: prefetch the next month forward ────────────────────────────
 
   useEffect(() => {
     if (!loading) prefetch(shiftMonth(currentDateRef.current, 1))
   }, [loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── polling: refresh the current window every 5 min ────────────────────
+  // ── polling: revalidate every 5 min ──────────────────────────────────────
 
   useEffect(() => {
     intervalRef.current = setInterval(
