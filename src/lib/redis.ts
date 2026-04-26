@@ -103,8 +103,9 @@ export function createEntityHelpers<T extends { id: string }>(
     async getAll(): Promise<T[]> {
       const ids = await this.getIds()
       if (ids.length === 0) return []
-      const items = await Promise.all(ids.map((id) => redis.get<T>(entityKey(id))))
-      return items.filter((item) => item !== null) as T[]
+      // mget fetches all entities in one round-trip instead of N individual GETs
+      const items = await redis.mget<(T | null)[]>(...ids.map(id => entityKey(id)) as [string, ...string[]])
+      return items.filter((item): item is T => item !== null)
     },
 
     async getById(id: string): Promise<T | null> {

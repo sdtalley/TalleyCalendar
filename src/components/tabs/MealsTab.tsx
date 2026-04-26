@@ -908,7 +908,7 @@ export function MealsTab() {
 
   const [subTab, setSubTab] = useState<'planner' | 'recipes'>('planner')
 
-  const refreshTick = useAutoRefresh(30_000)
+  const refreshTick = useAutoRefresh(30_000, { from: 1, to: 5 })
 
   // ── Planner state ──────────────────────────────────────────────────────────
   const [weekStart, setWeekStart] = useState(() => weekStartFor(today))
