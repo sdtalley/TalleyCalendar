@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { InfoBar } from '@/components/layout/InfoBar'
 import type { Reward, StarTransaction, FamilyMember } from '@/lib/calendar/types'
 
@@ -355,7 +355,7 @@ export function RewardsTab() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-      if (res.ok) setRewards(prev => [...prev, await res.json()])
+      if (res.ok) { const created = await res.json(); setRewards(prev => [...prev, created]) }
     }
     setShowForm(false)
     setEditReward(null)
