@@ -188,6 +188,28 @@ export interface RoutineCompletion {
   completedByMemberId?: string
 }
 
+// ── Rewards & Stars (Phase 3B) ────────────────────────────────────────────
+
+export interface Reward {
+  id: string
+  title: string
+  emoji?: string
+  starCost: number           // 1–500
+  memberIds: string[]        // which profiles can redeem this reward
+  recurring: boolean         // false = one-time per member; true = redeemable repeatedly
+  redeemedByMemberIds?: string[]  // tracks non-recurring redemptions per member
+  createdAt: string
+}
+
+export interface StarTransaction {
+  id: string
+  memberId: string
+  delta: number              // positive = earned, negative = spent/adjusted
+  reason: string             // "chore:{id}" | "routine:{id}" | "redemption:{id}" | "manual"
+  label: string              // human-readable: "Completed: Brush Teeth"
+  timestamp: string
+}
+
 // ── Lists (Phase 3B) ─────────────────────────────────────────────────────
 
 export type ListType = 'todo' | 'grocery' | 'other'

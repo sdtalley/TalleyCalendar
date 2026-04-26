@@ -10,6 +10,8 @@ import type {
   ChoreCompletion,
   Routine,
   RoutineCompletion,
+  Reward,
+  StarTransaction,
   AppList,
   ListItem,
 } from './calendar/types'
@@ -62,8 +64,12 @@ const KEYS = {
   routineIds:        'routines:ids',
   routineCompletion: (date: string, routineId: string) => `routine-completion:${date}:${routineId}`,
 
-  // Star balances (Phase 3B)
-  starBalance: (memberId: string) => `star-balance:${memberId}`,
+  // Star balances + transactions (Phase 3B)
+  starBalance:      (memberId: string) => `star-balance:${memberId}`,
+  starTransactions: (memberId: string) => `star-transactions:${memberId}`,
+
+  // Rewards (Phase 3B)
+  rewardIds: 'rewards:ids',
 
   // Lists (Phase 3B)
   listIds: 'lists:ids',
@@ -483,4 +489,34 @@ export async function clearCheckedItems(listId: string): Promise<AppList | null>
   const updated = { ...list, items, updatedAt: new Date().toISOString() }
   await redis.set(`list:${listId}`, updated)
   return updated
+}
+
+// ── Rewards (Phase 3B) ────────────────────────────────────────────────────
+
+const rewardHelpers = createEntityHelpers<Reward>('reward', KEYS.rewardIds)
+
+export const getRewards   = ()                                                  => rewardHelpers.getAll()
+export const getReward    = (id: string)                                        => rewardHelpers.getById(id)
+export const createReward = (r: Reward)                                         => rewardHelpers.create(r)
+export const updateReward = (id: string, u: Partial<Omit<Reward, 'id'>>)       => rewardHelpers.update(id, u)
+export const deleteReward = (id: string)                                        => rewardHelpers.remove(id)
+
+// ── Star Transactions (Phase 3B) ──────────────────────────────────────────
+
+const TRANSACTION_CAP = 100
+
+export async function logStarTransaction(tx: StarTransaction): Promise<void> {
+  const key = KEYS.starTransactions(tx.memberId)
+  const existing = (await redis.get<StarTransaction[]>(key)) ?? []
+  await redis.set(key, [tx, ...existing].slice(0, TRANSACTION_CAP))
+}
+
+export async function getStarTransactions(memberId: string): Promise<StarTransaction[]> {
+  return (await redis.get<StarTransaction[]>(KEYS.starTransactions(memberId))) ?? []
+}
+
+export async function getAllStarBalances(memberIds: string[]): Promise<Record<string, number>> {
+  if (!memberIds.length) return {}
+  const balances = await Promise.all(memberIds.map(id => getStarBalance(id)))
+  return Object.fromEntries(memberIds.map((id, i) => [id, balances[i]]))
 }

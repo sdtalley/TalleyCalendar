@@ -5,6 +5,7 @@ import {
   setRoutineCompletion,
   removeRoutineCompletion,
   adjustStarBalance,
+  logStarTransaction,
 } from '@/lib/redis'
 import { parseBody, z } from '@/lib/validate'
 
@@ -37,6 +38,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   let newStarBalance: number | undefined
   if (routine.starValue > 0 && memberId) {
     newStarBalance = await adjustStarBalance(memberId, routine.starValue)
+    await logStarTransaction({
+      id: crypto.randomUUID(), memberId, delta: routine.starValue,
+      reason: `routine:${id}`, label: `Completed: ${routine.title}`,
+      timestamp: new Date().toISOString(),
+    })
   }
 
   return NextResponse.json({ completion, newStarBalance })
