@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { InfoBar } from '@/components/layout/InfoBar'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 import type { DayMeals, MealCategory, MealEntry, Recipe } from '@/lib/calendar/types'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -907,6 +908,8 @@ export function MealsTab() {
 
   const [subTab, setSubTab] = useState<'planner' | 'recipes'>('planner')
 
+  const refreshTick = useAutoRefresh()
+
   // ── Planner state ──────────────────────────────────────────────────────────
   const [weekStart, setWeekStart] = useState(() => weekStartFor(today))
   const [meals,     setMeals]     = useState<Record<string, DayMeals>>({})
@@ -919,7 +922,7 @@ export function MealsTab() {
   const weekDates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const weekEnd   = weekDates[6]
 
-  // Fetch planner meals
+  // Fetch planner meals — also re-runs on visibility change / 5-min poll
   useEffect(() => {
     const start = toDateKey(weekStart)
     const end   = toDateKey(weekEnd)
@@ -927,16 +930,16 @@ export function MealsTab() {
       .then(r => r.json())
       .then((data: Record<string, DayMeals>) => setMeals(data))
       .catch(() => {})
-  }, [weekStart.toISOString()]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [weekStart.toISOString(), refreshTick]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch recipes when on that sub-tab
+  // Fetch recipes when on that sub-tab — also re-runs on visibility change / 5-min poll
   useEffect(() => {
     if (subTab !== 'recipes') return
     fetch('/api/recipes')
       .then(r => r.json())
       .then((data: Recipe[]) => setRecipes(data))
       .catch(() => {})
-  }, [subTab, recipesVersion])
+  }, [subTab, recipesVersion, refreshTick])
 
   const prevWeek = useCallback(() => setWeekStart(s => addDays(s, -7)), [])
   const nextWeek = useCallback(() => setWeekStart(s => addDays(s, 7)), [])

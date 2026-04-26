@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { Chore, Routine, FamilyMember, SessionPayload } from '@/lib/calendar/types'
 import { InfoBar } from '@/components/layout/InfoBar'
+import { useAutoRefresh } from '@/hooks/useAutoRefresh'
 import { ChoreForm, type ChoreFormData } from '@/components/tasks/ChoreForm'
 import { RoutineForm, type RoutineFormData } from '@/components/tasks/RoutineForm'
 import { TasksDayView } from '@/components/tasks/TasksDayView'
@@ -61,6 +62,8 @@ export function TasksTab() {
   const isAdmin = session?.role === 'admin'
   const t = today()
 
+  const autoTick = useAutoRefresh()
+
   useEffect(() => {
     Promise.all([
       fetch('/api/auth/me').then(r => r.ok ? r.json() : null),
@@ -70,6 +73,11 @@ export function TasksTab() {
       setMembers(Array.isArray(mems) ? mems : [])
     })
   }, [])
+
+  // Bump refreshKey on visibility change / 5-min poll so chores+routines stay fresh
+  useEffect(() => {
+    if (autoTick > 0) setRefreshKey(k => k + 1)
+  }, [autoTick])
 
   const refresh = () => setRefreshKey(k => k + 1)
 
