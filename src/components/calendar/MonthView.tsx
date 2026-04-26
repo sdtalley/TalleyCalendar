@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect } from 'react'
 import { getMonthGridDates, sameDay, eventSpansDay, hexToRgba, formatTimeCompact } from '@/lib/utils'
-import type { CalendarEvent } from '@/lib/calendar/types'
+import type { CalendarEvent, DayMeals, MealCategory } from '@/lib/calendar/types'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const EVENT_ROW_H = 22  // px per event pill + gap
@@ -41,7 +41,7 @@ export function MonthView({
 
   const gridRef = useRef<HTMLDivElement>(null)
   const [maxShow, setMaxShow] = useState(3)
-  const [meals, setMeals] = useState<Record<string, string>>({})
+  const [meals, setMeals] = useState<Record<string, DayMeals>>({})
 
   // Fetch meals for the visible grid range
   useEffect(() => {
@@ -179,7 +179,14 @@ export function MonthView({
             e => !e.allDay && sameDay(e.start, e.end) && sameDay(e.start, date)
           )
           const dayEvents = [...dayAllDay, ...dayTimed]
-          const dinnerName = meals[dateKey] || ''
+          const dayMeals = meals[dateKey]
+          const MEAL_CATS: MealCategory[] = ['breakfast', 'lunch', 'dinner', 'snack']
+          const MEAL_COLORS: Record<MealCategory, string> = {
+            breakfast: '#3b82f6', lunch: '#22c55e', dinner: '#f59e0b', snack: '#a855f7',
+          }
+          const mealPills = dayMeals
+            ? MEAL_CATS.flatMap(c => dayMeals[c].map(e => ({ name: e.name, color: MEAL_COLORS[c] })))
+            : []
 
           return (
             <div
@@ -259,7 +266,7 @@ export function MonthView({
               </div>
 
               {/* Events */}
-              <div className="flex flex-col gap-[2px] mt-[2px] overflow-hidden flex-1" style={{ paddingBottom: dinnerName ? 18 : 0 }}>
+              <div className="flex flex-col gap-[2px] mt-[2px] overflow-hidden flex-1" style={{ paddingBottom: mealPills.length > 0 ? mealPills.length * 15 : 0 }}>
                 {dayEvents.slice(0, maxShow).map(ev => {
                   const isAllDayStyle = ev.allDay || !sameDay(ev.start, ev.end)
                   const isDragging = monthDragRef.current?.event.id === ev.id && monthDragRef.current?.moved
@@ -304,20 +311,31 @@ export function MonthView({
                 )}
               </div>
 
-              {/* Dinner pill */}
-              {dinnerName && (
+              {/* Meal pills */}
+              {mealPills.slice(0, 2).map((p, pi) => (
                 <div
+                  key={pi}
                   style={{
-                    position: 'absolute', bottom: 2, left: 2, right: 2,
-                    fontSize: 10, fontWeight: 600, color: '#f59e0b',
-                    background: 'rgba(245,158,11,0.15)',
-                    borderLeft: '3px solid #f59e0b',
+                    position: 'absolute', bottom: 2 + pi * 15, left: 2, right: 2,
+                    fontSize: 10, fontWeight: 600, color: p.color,
+                    background: `${p.color}22`,
+                    borderLeft: `3px solid ${p.color}`,
                     borderRadius: '0 3px 3px 0',
                     padding: '1px 4px',
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}
                 >
-                  {dinnerName}
+                  {p.name}
+                </div>
+              ))}
+              {mealPills.length > 2 && (
+                <div
+                  style={{
+                    position: 'absolute', bottom: 2 + 2 * 15, left: 2, right: 2,
+                    fontSize: 9, color: 'var(--text-faint)', paddingLeft: 4,
+                  }}
+                >
+                  +{mealPills.length - 2} more
                 </div>
               )}
             </div>

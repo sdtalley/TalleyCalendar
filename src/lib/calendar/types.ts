@@ -94,6 +94,27 @@ export interface CalendarEvent {
   }
 }
 
+// ── Meals (Phase 3C) ─────────────────────────────────────────────────────
+
+export type MealCategory = 'breakfast' | 'lunch' | 'dinner' | 'snack'
+
+export interface MealEntry {
+  id: string
+  name: string
+  note?: string
+  repeat?: {
+    frequency: 'weekly'
+    daysOfWeek: number[]   // 0=Sun..6=Sat
+  }
+}
+
+export interface DayMeals {
+  breakfast: MealEntry[]
+  lunch: MealEntry[]
+  dinner: MealEntry[]
+  snack: MealEntry[]
+}
+
 // ── App Settings (stored in Redis) ─────────────────────────────────────────
 
 export interface AppSettings {
@@ -110,6 +131,18 @@ export interface AppSettings {
     label: string               // city name for display
   }
   settingsPin: string           // 4-digit PIN to protect settings, empty = disabled
+  showMealCategories?: {
+    breakfast: boolean
+    lunch: boolean
+    dinner: boolean
+    snack: boolean
+  }
+  mealCategoryNames?: {
+    breakfast: string
+    lunch: string
+    dinner: string
+    snack: string
+  }
 }
 
 // ── User Accounts (Phase 3A) ──────────────────────────────────────────────

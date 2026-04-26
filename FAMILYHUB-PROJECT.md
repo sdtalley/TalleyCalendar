@@ -1,6 +1,6 @@
 # FamilyHub Calendar — Master Project Specification
 
-**Current state (2026-04-23):** Phase 3B Features 4–6 + GAPs A–I complete. All 4 calendar views match Skylight. TasksTab fully redesigned: Day view (multi-column per-profile, completion rings) + Week view (single-profile grid Mon–Sun, per-day checkboxes). Next: 3B-GAP-J (Lists gap analysis) → Feature 7 (Rewards/Stars).  
+**Current state (2026-04-25):** Phase 3B complete. Phase 3C Feature 8 (Meals Expanded) done: 4-category meal planner (breakfast/lunch/dinner/snack), 7-day grid MealsTab UI, new `meals:{date}` Redis key with lazy migration from old `meal:{date}` keys, PUT/DELETE API routes, all 4 categories shown in WeekView (schedule) and MonthView. Next: Feature 9 (Recipe Box).  
 **Detailed Phase 3 implementation specs:** see Claude Code memory → `phase3_implementation_plan.md`
 
 ---

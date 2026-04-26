@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDrag } from '@use-gesture/react'
 import { sameDay, eventSpansDay, hexToRgba, formatTime, formatTimeRange } from '@/lib/utils'
-import type { CalendarEvent, FamilyMemberUI } from '@/lib/calendar/types'
+import type { CalendarEvent, DayMeals, FamilyMemberUI, MealCategory } from '@/lib/calendar/types'
 
 function getMemberInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -274,7 +274,7 @@ export function WeekView({ currentDate, events, familyMembers = [], onEventClick
   )
   const maxAllDay = Math.max(0, ...allDayByDay.map(d => d.length))
 
-  const [meals, setMeals] = useState<Record<string, string>>({})
+  const [meals, setMeals] = useState<Record<string, DayMeals>>({})
   const [reschedView, setReschedView] = useState<{ dayIndex: number; topMin: number; event: CalendarEvent } | null>(null)
 
   useEffect(() => {
@@ -367,46 +367,68 @@ export function WeekView({ currentDate, events, familyMembers = [], onEventClick
         </div>
       )}
 
-      {/* Dinner band row */}
-      <div
-        className="flex-shrink-0 grid"
-        style={{
-          gridTemplateColumns: `60px repeat(${numDays}, 1fr)`,
-          borderBottom: '1px solid var(--border)',
-          background: 'var(--surface)',
-        }}
-      >
-        <div
-          className="font-mono text-[10px] text-right pr-2 flex items-center justify-end"
-          style={{ color: 'var(--text-faint)' }}
-        >
-          dinner
-        </div>
-        {weekDates.map((day, di) => {
-          const dinnerName = meals[toDateKey(day)] ?? ''
-          return (
+      {/* Meals band row */}
+      {(() => {
+        const MEAL_COLORS: Record<MealCategory, string> = {
+          breakfast: '#3b82f6', lunch: '#22c55e', dinner: '#f59e0b', snack: '#a855f7',
+        }
+        const MEAL_CATS: MealCategory[] = ['breakfast', 'lunch', 'dinner', 'snack']
+        const hasAny = weekDates.some(d => {
+          const dm = meals[toDateKey(d)]
+          return dm && MEAL_CATS.some(c => dm[c].length > 0)
+        })
+        if (!hasAny) return null
+        return (
+          <div
+            className="flex-shrink-0 grid"
+            style={{
+              gridTemplateColumns: `60px repeat(${numDays}, 1fr)`,
+              borderBottom: '1px solid var(--border)',
+              background: 'var(--surface)',
+            }}
+          >
             <div
-              key={di}
-              className="py-1 px-[2px]"
-              style={{ borderLeft: '1px solid var(--border)', minHeight: 24 }}
+              className="font-mono text-[10px] text-right pr-2 flex items-center justify-end"
+              style={{ color: 'var(--text-faint)' }}
             >
-              {dinnerName && (
-                <div
-                  className="text-[10px] px-1.5 py-[1px] rounded font-semibold truncate"
-                  style={{
-                    background: 'rgba(245,158,11,0.15)',
-                    color: '#f59e0b',
-                    borderLeft: '3px solid #f59e0b',
-                    borderRadius: '0 3px 3px 0',
-                  }}
-                >
-                  {dinnerName}
-                </div>
-              )}
+              meals
             </div>
-          )
-        })}
-      </div>
+            {weekDates.map((day, di) => {
+              const dm = meals[toDateKey(day)]
+              const pills = dm
+                ? MEAL_CATS.flatMap(c => dm[c].map(e => ({ name: e.name, color: MEAL_COLORS[c] })))
+                : []
+              return (
+                <div
+                  key={di}
+                  className="py-1 px-[2px] flex flex-col gap-[2px]"
+                  style={{ borderLeft: '1px solid var(--border)', minHeight: 24 }}
+                >
+                  {pills.slice(0, 3).map((p, pi) => (
+                    <div
+                      key={pi}
+                      className="text-[10px] px-1.5 py-[1px] font-semibold truncate"
+                      style={{
+                        background: `${p.color}22`,
+                        color: p.color,
+                        borderLeft: `3px solid ${p.color}`,
+                        borderRadius: '0 3px 3px 0',
+                      }}
+                    >
+                      {p.name}
+                    </div>
+                  ))}
+                  {pills.length > 3 && (
+                    <div className="text-[9px] pl-1" style={{ color: 'var(--text-faint)' }}>
+                      +{pills.length - 3}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )
+      })()}
 
       {/* Scrollable body */}
       <div
