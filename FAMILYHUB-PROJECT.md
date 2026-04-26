@@ -1,6 +1,6 @@
 # FamilyHub Calendar — Master Project Specification
 
-**Current state (2026-04-25):** Phase 3B complete. Phase 3C Feature 8 (Meals Expanded) done: 4-category meal planner (breakfast/lunch/dinner/snack), 7-day grid MealsTab UI, new `meals:{date}` Redis key with lazy migration from old `meal:{date}` keys, PUT/DELETE API routes, all 4 categories shown in WeekView (schedule) and MonthView. Next: Feature 9 (Recipe Box).  
+**Current state (2026-04-26):** Phase 3B complete. Phase 3C Features 8 + 9 done. Feature 8: 4-category meal planner. Feature 9 (Recipe Box): `Recipe` type, `recipes:ids` Redis key, GET/POST/PATCH/DELETE `/api/recipes` routes, server-side JSON-LD URL importer (`/api/recipes/import-url`), MealsTab Planner/Recipes sub-nav with two-panel Recipes view (list + detail), Plan Meal modal, Add to Grocery List flow. Next: Feature 10 (Screensaver, Phase 3D).  
 **Detailed Phase 3 implementation specs:** see Claude Code memory → `phase3_implementation_plan.md`
 
 ---
@@ -88,8 +88,8 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 |---|---|---|
 | **Calendar** | Month / **Week** (7-day card grid) / Schedule (1–7 days) / Day (mini-cal + event list) | ✅ Live (all 4 views) |
 | **Tasks** | Chores + Routines — Day view (per-profile columns) + Week view (grid) | ✅ Live |
-| **Rewards** | Stars + Reward redemption | Feature 7 next |
-| **Meals** | Meal planner + Recipe Box | Phase 3C |
+| **Rewards** | Stars + Reward redemption | ✅ Live |
+| **Meals** | Meal planner (4 categories) + Recipe Box (Planner/Recipes sub-nav) | ✅ Live |
 | **Lists** | Custom lists (To Do / Grocery / Other) | ✅ Live |
 | **Sleep** | Sleep mode control + schedule | Phase 3D |
 | Settings | `<Link href="/settings">` (not a tab) | ✅ Live |

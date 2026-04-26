@@ -14,6 +14,7 @@ import type {
   StarTransaction,
   AppList,
   ListItem,
+  Recipe,
 } from './calendar/types'
 
 // ── Redis client ───────────────────────────────────────────────────────────
@@ -73,6 +74,9 @@ const KEYS = {
 
   // Lists (Phase 3B)
   listIds: 'lists:ids',
+
+  // Recipes (Phase 3C)
+  recipeIds: 'recipes:ids',
 } as const
 
 // ── Entity helper factory ──────────────────────────────────────────────────
@@ -520,3 +524,13 @@ export async function getAllStarBalances(memberIds: string[]): Promise<Record<st
   const balances = await Promise.all(memberIds.map(id => getStarBalance(id)))
   return Object.fromEntries(memberIds.map((id, i) => [id, balances[i]]))
 }
+
+// ── Recipes (Phase 3C) ────────────────────────────────────────────────────
+
+const recipeHelpers = createEntityHelpers<Recipe>('recipe', KEYS.recipeIds)
+
+export const getRecipes    = ()                                                   => recipeHelpers.getAll()
+export const getRecipe     = (id: string)                                         => recipeHelpers.getById(id)
+export const createRecipe  = (r: Recipe)                                          => recipeHelpers.create(r)
+export const updateRecipe  = (id: string, u: Partial<Omit<Recipe, 'id'>>)        => recipeHelpers.update(id, u)
+export const deleteRecipe  = (id: string)                                         => recipeHelpers.remove(id)

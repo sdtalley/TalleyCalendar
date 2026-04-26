@@ -101,11 +101,23 @@ export type MealCategory = 'breakfast' | 'lunch' | 'dinner' | 'snack'
 export interface MealEntry {
   id: string
   name: string
+  recipeId?: string        // links back to Recipe.id if added via "Plan Meal"
   note?: string
   repeat?: {
     frequency: 'weekly'
     daysOfWeek: number[]   // 0=Sun..6=Sat
   }
+}
+
+export interface Recipe {
+  id: string
+  name: string
+  category: MealCategory | string   // 'breakfast' | 'lunch' | 'dinner' | 'snack' or custom
+  instructions: string              // free text, newline-separated paragraphs
+  ingredients: string[]             // one entry per ingredient
+  sourceUrl?: string                // if imported from a URL
+  createdAt: string
+  updatedAt: string
 }
 
 export interface DayMeals {
