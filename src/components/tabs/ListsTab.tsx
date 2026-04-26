@@ -47,21 +47,27 @@ function groupBySubcategory(items: ListItem[]): { label: string | null; items: L
 
 interface ListFormProps {
   list?: AppList
-  onSave: (data: { title: string; type: ListType; color: string }) => void
+  onSave: (data: { title: string; type: ListType; color: string; isGroceryDefault?: boolean }) => void
   onDelete?: () => void
   onClose: () => void
 }
 
 function ListForm({ list, onSave, onDelete, onClose }: ListFormProps) {
-  const [title,  setTitle]  = useState(list?.title ?? '')
-  const [type,   setType]   = useState<ListType>(list?.type ?? 'todo')
-  const [color,  setColor]  = useState(list?.color ?? COLOR_SWATCHES[0])
-  const [saving, setSaving] = useState(false)
+  const [title,            setTitle]            = useState(list?.title ?? '')
+  const [type,             setType]             = useState<ListType>(list?.type ?? 'todo')
+  const [color,            setColor]            = useState(list?.color ?? COLOR_SWATCHES[0])
+  const [isGroceryDefault, setIsGroceryDefault] = useState(list?.isGroceryDefault ?? false)
+  const [saving,           setSaving]           = useState(false)
+
+  function handleTypeChange(t: ListType) {
+    setType(t)
+    if (t !== 'grocery') setIsGroceryDefault(false)
+  }
 
   const handleSave = async () => {
     if (!title.trim()) return
     setSaving(true)
-    await onSave({ title: title.trim(), type, color })
+    await onSave({ title: title.trim(), type, color, isGroceryDefault: isGroceryDefault || undefined })
     setSaving(false)
   }
 
@@ -101,7 +107,7 @@ function ListForm({ list, onSave, onDelete, onClose }: ListFormProps) {
             <button
               key={t}
               type="button"
-              onClick={() => setType(t)}
+              onClick={() => handleTypeChange(t)}
               style={{
                 flex: 1, padding: '9px 0', borderRadius: 10, fontSize: 13, fontWeight: 600,
                 background: type === t ? `${color}22` : 'var(--surface2)',
@@ -131,6 +137,37 @@ function ListForm({ list, onSave, onDelete, onClose }: ListFormProps) {
             />
           ))}
         </div>
+
+        {/* Default grocery list toggle — only for grocery type */}
+        {type === 'grocery' && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 2 }}>
+                Default grocery list
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                Recipe ingredients will be added here
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsGroceryDefault(v => !v)}
+              style={{
+                width: 40, height: 22, borderRadius: 11, flexShrink: 0,
+                background: isGroceryDefault ? 'var(--accent)' : 'var(--border)',
+                border: 'none', cursor: 'pointer', position: 'relative',
+                transition: 'background 0.2s',
+              }}
+            >
+              <span style={{
+                position: 'absolute', top: 3, left: 3,
+                width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                transform: isGroceryDefault ? 'translateX(18px)' : 'translateX(0)',
+                transition: 'transform 0.2s', display: 'block',
+              }} />
+            </button>
+          </div>
+        )}
 
         {/* Actions */}
         <button
@@ -170,13 +207,13 @@ function ListForm({ list, onSave, onDelete, onClose }: ListFormProps) {
 
 interface ListDetailProps {
   list: AppList
+  showChecked: boolean
   onBack: () => void
   onListUpdated: (list: AppList) => void
   onEditList: () => void
 }
 
-function ListDetail({ list, onBack, onListUpdated, onEditList }: ListDetailProps) {
-  const [showChecked, setShowChecked] = useState(true)
+function ListDetail({ list, showChecked, onBack, onListUpdated, onEditList }: ListDetailProps) {
   const [newText,     setNewText]     = useState('')
   const [newSubcat,   setNewSubcat]   = useState('')
   const [showSubcat,  setShowSubcat]  = useState(false)
@@ -276,17 +313,6 @@ function ListDetail({ list, onBack, onListUpdated, onEditList }: ListDetailProps
             Clear {checkedCount} done
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => setShowChecked(s => !s)}
-          style={{
-            background: 'none', border: '1px solid var(--border)',
-            borderRadius: 8, color: showChecked ? list.color : 'var(--text-dim)',
-            fontSize: 12, padding: '5px 10px', cursor: 'pointer',
-          }}
-        >
-          {showChecked ? 'Hide done' : 'Show done'}
-        </button>
         <button type="button" onClick={onEditList} style={{
           background: 'none', border: '1px solid var(--border)',
           borderRadius: 8, color: 'var(--text-dim)', fontSize: 12,
@@ -456,6 +482,79 @@ function ItemRow({ item, accentColor, onToggle, onDelete }: ItemRowProps) {
   )
 }
 
+// ── ListFilterButton ──────────────────────────────────────────────────────
+
+function ListFilterButton({ showChecked, onToggle }: { showChecked: boolean; onToggle: () => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const filterActive = !showChecked
+
+  useEffect(() => {
+    if (!open) return
+    function h(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [open])
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 rounded-[8px] text-[12px] font-medium cursor-pointer transition-all duration-150 border-none whitespace-nowrap"
+        style={{
+          padding: '5px 10px',
+          background: open || filterActive ? 'var(--accent-glow)' : 'var(--surface2)',
+          border: `1px solid ${open || filterActive ? 'var(--accent)' : 'var(--border)'}`,
+          color: open || filterActive ? 'var(--accent)' : 'var(--text-dim)',
+        }}
+      >
+        ⊞ Filter
+        {filterActive && (
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
+        )}
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+          minWidth: 190, zIndex: 9999, padding: '6px 0',
+        }}>
+          <button
+            type="button"
+            onClick={() => { onToggle(); setOpen(false) }}
+            className="flex items-center justify-between w-full cursor-pointer border-none transition-colors duration-100"
+            style={{
+              padding: '9px 14px',
+              background: 'transparent',
+              color: 'var(--text)', fontSize: 13,
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface2)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <span>Show completed</span>
+            <span style={{
+              width: 32, height: 18, borderRadius: 9, flexShrink: 0,
+              background: showChecked ? 'var(--accent)' : 'var(--border)',
+              display: 'flex', alignItems: 'center',
+              padding: '0 2px', transition: 'background 0.2s',
+            }}>
+              <span style={{
+                width: 14, height: 14, borderRadius: '50%', background: '#fff',
+                transform: showChecked ? 'translateX(14px)' : 'translateX(0)',
+                transition: 'transform 0.2s', display: 'block',
+              }} />
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── ListCard ──────────────────────────────────────────────────────────────
 
 interface ListCardProps {
@@ -490,12 +589,23 @@ function ListCard({ list, onClick }: ListCardProps) {
         ;(e.currentTarget as HTMLButtonElement).style.boxShadow = ''
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
-          {list.title}
-        </span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>
+            {list.title}
+          </span>
+          {list.isGroceryDefault && (
+            <span style={{
+              fontSize: 10, padding: '2px 6px', borderRadius: 6, flexShrink: 0,
+              background: 'var(--accent-glow)', color: 'var(--accent)',
+              fontWeight: 600, border: '1px solid var(--accent)',
+            }}>
+              Default
+            </span>
+          )}
+        </div>
         <span style={{
-          fontSize: 11, padding: '2px 7px', borderRadius: 8,
+          fontSize: 11, padding: '2px 7px', borderRadius: 8, flexShrink: 0,
           background: `${list.color}22`, color: list.color, fontWeight: 600,
         }}>
           {TYPE_LABELS[list.type].split(' ')[1]}
@@ -529,10 +639,13 @@ export function ListsTab() {
   const [lists,       setLists]       = useState<AppList[]>([])
   const [loading,     setLoading]     = useState(true)
   const [selectedId,  setSelectedId]  = useState<string | null>(null)
+  const [showChecked, setShowChecked] = useState(true)
   const [showForm,    setShowForm]    = useState(false)
   const [editList,    setEditList]    = useState<AppList | null>(null)
 
   const selectedList = lists.find(l => l.id === selectedId) ?? null
+
+  useEffect(() => { setShowChecked(true) }, [selectedId])
 
   useEffect(() => {
     fetch('/api/lists')
@@ -544,14 +657,21 @@ export function ListsTab() {
     setLists(prev => prev.map(l => l.id === updated.id ? updated : l))
   }, [])
 
-  const handleSaveList = useCallback(async (data: { title: string; type: ListType; color: string }) => {
+  const handleSaveList = useCallback(async (data: { title: string; type: ListType; color: string; isGroceryDefault?: boolean }) => {
     if (editList) {
       const res = await fetch(`/api/lists/${editList.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-      if (res.ok) handleListUpdated(await res.json())
+      if (res.ok) {
+        const updated = await res.json()
+        // If this list became the default, clear the flag on any other list in local state
+        setLists(prev => prev.map(l =>
+          l.id === updated.id ? updated :
+          data.isGroceryDefault ? { ...l, isGroceryDefault: false } : l
+        ))
+      }
     } else {
       const res = await fetch('/api/lists', {
         method: 'POST',
@@ -560,13 +680,16 @@ export function ListsTab() {
       })
       if (res.ok) {
         const created = await res.json()
-        setLists(prev => [...prev, created])
+        setLists(prev => [
+          ...(data.isGroceryDefault ? prev.map(l => ({ ...l, isGroceryDefault: false })) : prev),
+          created,
+        ])
         setSelectedId(created.id)
       }
     }
     setShowForm(false)
     setEditList(null)
-  }, [editList, handleListUpdated])
+  }, [editList])
 
   const handleDeleteList = useCallback(async () => {
     if (!editList) return
@@ -580,16 +703,18 @@ export function ListsTab() {
   // ── Render ─────────────────────────────────────────────────────────────
   // InfoBar persists on both grid and detail views (consistent with all other tabs).
 
-  const rightSlot = !selectedList ? (
-    <button
-      type="button"
-      onClick={() => { setEditList(null); setShowForm(true) }}
-      className="flex items-center gap-1 rounded-[8px] text-sm font-semibold text-white border-none cursor-pointer"
-      style={{ padding: '6px 14px', background: 'var(--accent)' }}
-    >
-      + New List
-    </button>
-  ) : null
+  const rightSlot = selectedList
+    ? <ListFilterButton showChecked={showChecked} onToggle={() => setShowChecked(v => !v)} />
+    : (
+      <button
+        type="button"
+        onClick={() => { setEditList(null); setShowForm(true) }}
+        className="flex items-center gap-1 rounded-[8px] text-sm font-semibold text-white border-none cursor-pointer"
+        style={{ padding: '6px 14px', background: 'var(--accent)' }}
+      >
+        + New List
+      </button>
+    )
 
   return (
     <div style={{
@@ -601,6 +726,7 @@ export function ListsTab() {
       {selectedList ? (
         <ListDetail
           list={selectedList}
+          showChecked={showChecked}
           onBack={() => setSelectedId(null)}
           onListUpdated={handleListUpdated}
           onEditList={() => { setEditList(selectedList); setShowForm(true) }}

@@ -204,10 +204,11 @@ export interface AppList {
   id: string
   title: string
   type: ListType
-  color: string          // hex color for the list card
+  color: string              // hex color for the list card
   items: ListItem[]
-  createdAt: string      // ISO
-  updatedAt: string      // ISO
+  isGroceryDefault?: boolean // designates this list as the target for "Add to Grocery List"
+  createdAt: string          // ISO
+  updatedAt: string          // ISO
 }
 
 // ── UI types ───────────────────────────────────────────────────────────────

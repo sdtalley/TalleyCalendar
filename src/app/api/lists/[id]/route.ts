@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getList, updateList, deleteList } from '@/lib/redis'
+import { getList, getLists, updateList, deleteList } from '@/lib/redis'
 import { parseBody, z } from '@/lib/validate'
 
 const PatchSchema = z.object({
-  title: z.string().min(1).optional(),
-  type:  z.enum(['todo', 'grocery', 'other']).optional(),
-  color: z.string().min(1).optional(),
+  title:            z.string().min(1).optional(),
+  type:             z.enum(['todo', 'grocery', 'other']).optional(),
+  color:            z.string().min(1).optional(),
+  isGroceryDefault: z.boolean().optional(),
 })
 
 // PATCH /api/lists/[id]
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const result = await parseBody(req, PatchSchema)
   if (result.error) return result.response
+
+  if (result.data.isGroceryDefault) {
+    const all = await getLists()
+    await Promise.all(
+      all.filter(l => l.id !== params.id && l.isGroceryDefault)
+         .map(l => updateList(l.id, { isGroceryDefault: false, updatedAt: new Date().toISOString() }))
+    )
+  }
 
   const updated = await updateList(params.id, { ...result.data, updatedAt: new Date().toISOString() })
   if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 })
