@@ -10,7 +10,7 @@ interface Props {
 }
 
 function photoUrl(id: string) {
-  return `https://drive.google.com/uc?export=view&id=${id}`
+  return `/api/screensaver/photo/${id}`
 }
 
 function formatClock(d: Date) {
@@ -216,14 +216,6 @@ export function Screensaver({ settings, suppress = false }: Props) {
           </div>
         </div>
       )}
-
-      {/* Tap-to-dismiss hint */}
-      <div
-        className="absolute bottom-10 right-10 text-sm select-none"
-        style={{ color: 'rgba(255,255,255,0.4)', pointerEvents: 'none', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}
-      >
-        Tap to dismiss
-      </div>
 
       {/* No-folder fallback */}
       {photos.length === 0 && (
