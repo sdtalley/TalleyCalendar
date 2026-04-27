@@ -637,9 +637,11 @@ function RecipeDetail({
 function RecipesView({
   recipes,
   onAddNew,
+  onSuppressScreensaver,
 }: {
   recipes: Recipe[]
   onAddNew: () => void
+  onSuppressScreensaver?: (suppress: boolean) => void
 }) {
   const [catFilter,      setCatFilter]      = useState<string | null>(null)
   const [selectedId,     setSelectedId]     = useState<string | null>(null)
@@ -649,6 +651,12 @@ function RecipesView({
   const [groceryStatus,  setGroceryStatus]  = useState<string | null>(null)
   const [localRecipes,   setLocalRecipes]   = useState<Recipe[]>(recipes)
   const [mobileView,     setMobileView]     = useState<'list' | 'detail'>('list')
+
+  // Suppress screensaver while a recipe is open (user may be cooking)
+  useEffect(() => {
+    onSuppressScreensaver?.(selectedId !== null)
+    return () => onSuppressScreensaver?.(false)
+  }, [selectedId, onSuppressScreensaver])
 
   // Keep local state in sync when parent re-loads
   useEffect(() => { setLocalRecipes(recipes) }, [recipes])
@@ -902,7 +910,7 @@ function RecipesView({
 
 // ── MealsTab ─────────────────────────────────────────────────────────────────
 
-export function MealsTab() {
+export function MealsTab({ onSuppressScreensaver }: { onSuppressScreensaver?: (suppress: boolean) => void } = {}) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
@@ -1177,6 +1185,7 @@ export function MealsTab() {
         <RecipesView
           recipes={recipes}
           onAddNew={() => {}}
+          onSuppressScreensaver={onSuppressScreensaver}
         />
       )}
 

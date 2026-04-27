@@ -127,6 +127,24 @@ export interface DayMeals {
   snack: MealEntry[]
 }
 
+// ── Screensaver Settings (Phase 3D) ──────────────────────────────────────
+
+export type ScreensaverMode = 'slideshow' | 'single'
+
+export interface ScreensaverSettings {
+  enabled: boolean
+  idleMinutes: number                      // 1–10; default 3
+  mode: ScreensaverMode                    // 'slideshow' = rotating; 'single' = one pinned photo
+  order: 'chronological' | 'shuffle'       // slideshow order; for single+shuffle = random each activation
+  secondsPerSlide: number                  // slideshow only; 5–120; default 30
+  fill: 'fit' | 'fill'                    // CSS object-fit: contain vs cover
+  showDateTime: boolean                    // clock overlay on screensaver
+  blurBackground: boolean                  // blur vs black letterbox gaps (fit mode only)
+  googleDriveFolderId?: string             // folder ID from Google Drive URL
+  googleDriveFolderName?: string           // display label saved after verification
+  singlePhotoId?: string                   // file ID to pin when mode === 'single'
+}
+
 // ── App Settings (stored in Redis) ─────────────────────────────────────────
 
 export interface AppSettings {
@@ -155,6 +173,7 @@ export interface AppSettings {
     dinner: string
     snack: string
   }
+  screensaver?: ScreensaverSettings
 }
 
 // ── User Accounts (Phase 3A) ──────────────────────────────────────────────

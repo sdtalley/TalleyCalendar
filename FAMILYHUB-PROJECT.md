@@ -1,6 +1,6 @@
 # FamilyHub Calendar — Master Project Specification
 
-**Current state (2026-04-26):** Phase 3B complete. Phase 3C Features 8 + 9 done. Feature 8: 4-category meal planner. Feature 9 (Recipe Box): `Recipe` type, `recipes:ids` Redis key, GET/POST/PATCH/DELETE `/api/recipes` routes, server-side JSON-LD URL importer (`/api/recipes/import-url`), MealsTab Planner/Recipes sub-nav with two-panel Recipes view (list + detail), Plan Meal modal, Add to Grocery List flow. Next: Feature 10 (Screensaver, Phase 3D).  
+**Current state (2026-04-26):** Phase 3B + 3C complete. Phase 3D Feature 10 (Screensaver) done. `ScreensaverSettings` type, `GOOGLE_API_KEY` env var, `GET /api/screensaver/photos` + `POST /api/screensaver/folder` API routes, `Screensaver.tsx` component (idle detection, slideshow + single-photo modes, cross-fade, clock overlay, touch-to-dismiss, recipe suppression), Screensaver settings section in Settings page (folder verify, mode toggle, photo picker grid, all sliders). Next: Feature 11 (Sleep mode, Phase 3D).  
 **Detailed Phase 3 implementation specs:** see Claude Code memory → `phase3_implementation_plan.md`
 
 ---
@@ -232,7 +232,7 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 - [ ] Feature 9: Recipe Box (manual + URL import via JSON-LD schema; Plan Meal; Add to Grocery List)
 
 **Phase 3D — Display Experience**
-- [ ] Feature 10: Screensaver (Google Drive public folder + API key; photo slideshow; idle detection)
+- [x] Feature 10: Screensaver (Google Drive public folder + API key; slideshow + single-photo modes; idle detection; cross-fade; clock overlay; recipe suppression)
 - [ ] Feature 11: True sleep mode (full black overlay; scheduled; touch-to-wake)
 - [ ] Feature 12: Countdowns (event flag; persistent CountdownBar; screensaver integration)
 - [ ] Feature 13: Calendar settings polish (weekStart, shadeWeekends, density, scheduleDays, displayName)

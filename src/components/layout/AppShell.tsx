@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavSidebar, type TabId } from './NavSidebar'
 import { CalendarTab } from '@/components/tabs/CalendarTab'
 import { TasksTab } from '@/components/tabs/TasksTab'
@@ -8,12 +8,24 @@ import { RewardsTab } from '@/components/tabs/RewardsTab'
 import { MealsTab } from '@/components/tabs/MealsTab'
 import { ListsTab } from '@/components/tabs/ListsTab'
 import { SleepTab } from '@/components/tabs/SleepTab'
+import { Screensaver } from '@/components/screensaver/Screensaver'
 import { useScreenDim } from '@/hooks/useScreenDim'
+import type { ScreensaverSettings } from '@/lib/calendar/types'
 
 export function AppShell() {
   useScreenDim()
 
   const [activeTab, setActiveTab] = useState<TabId>('calendar')
+  const [suppressScreensaver, setSuppressScreensaver] = useState(false)
+  const [screensaverSettings, setScreensaverSettings] = useState<ScreensaverSettings | null>(null)
+
+  // Fetch screensaver settings once on mount
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then(s => { if (s.screensaver) setScreensaverSettings(s.screensaver) })
+      .catch(() => {})
+  }, [])
 
   return (
     // Mobile (flex-col): content on top, NavSidebar on bottom (order-last)
@@ -26,7 +38,7 @@ export function AppShell() {
           {activeTab === 'calendar' && <CalendarTab />}
           {activeTab === 'tasks'    && <TasksTab />}
           {activeTab === 'rewards'  && <RewardsTab />}
-          {activeTab === 'meals'    && <MealsTab />}
+          {activeTab === 'meals'    && <MealsTab onSuppressScreensaver={setSuppressScreensaver} />}
           {activeTab === 'lists'    && <ListsTab />}
           {activeTab === 'sleep'    && <SleepTab />}
         </div>
@@ -34,6 +46,11 @@ export function AppShell() {
 
       {/* NavSidebar: left on desktop (order-first), bottom on mobile (order-last) */}
       <NavSidebar activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {/* Screensaver: full-screen overlay, mounted once, z-index above everything */}
+      {screensaverSettings && (
+        <Screensaver settings={screensaverSettings} suppress={suppressScreensaver} />
+      )}
     </div>
   )
 }

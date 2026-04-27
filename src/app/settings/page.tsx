@@ -3,13 +3,25 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import type { FamilyMember, ConnectedAccount, AppSettings, AppUser, SessionPayload } from '@/lib/calendar/types'
+import type { FamilyMember, ConnectedAccount, AppSettings, AppUser, SessionPayload, ScreensaverSettings, ScreensaverMode } from '@/lib/calendar/types'
 import { FamilyMemberList } from '@/components/settings/FamilyMemberList'
 import { AccountList } from '@/components/settings/AccountList'
 import { AddAccountFlow } from '@/components/settings/AddAccountFlow'
+import type { DrivePhoto } from '@/app/api/screensaver/photos/route'
 
 type AccountSafe = Omit<ConnectedAccount, 'auth'> & { authType: string }
 type UserSafe = Omit<AppUser, 'passwordHash'>
+
+const SS_DEFAULTS: ScreensaverSettings = {
+  enabled: true,
+  idleMinutes: 3,
+  mode: 'slideshow',
+  order: 'shuffle',
+  secondsPerSlide: 30,
+  fill: 'fill',
+  showDateTime: true,
+  blurBackground: false,
+}
 
 export default function SettingsPage() {
   const [members, setMembers] = useState<FamilyMember[]>([])
@@ -37,6 +49,15 @@ export default function SettingsPage() {
   const [newUserRole, setNewUserRole] = useState<AppUser['role']>('member')
   const [newUserMemberId, setNewUserMemberId] = useState<string>('')
   const [userFormError, setUserFormError] = useState('')
+
+  // Screensaver settings state
+  const [ss, setSs] = useState<ScreensaverSettings>(SS_DEFAULTS)
+  const [ssFolderInput, setSsFolderInput] = useState('')
+  const [ssFolderStatus, setSsFolderStatus] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null)
+  const [ssPhotos, setSsPhotos] = useState<DrivePhoto[]>([])
+  const [ssPhotoLoading, setSsPhotoLoading] = useState(false)
+  const [ssSaving, setSsSaving] = useState(false)
+
   const router = useRouter()
 
   // Check if PIN is required
@@ -92,6 +113,10 @@ export default function SettingsPage() {
           setWeatherLabel(settings.weather.label || '')
         }
         setCurrentPin(settings.settingsPin || '')
+        if (settings.screensaver) {
+          setSs(settings.screensaver)
+          setSsFolderInput(settings.screensaver.googleDriveFolderId ?? '')
+        }
       }
       setError(null)
     } catch {
@@ -216,6 +241,63 @@ export default function SettingsPage() {
     if (!confirm('Delete this user account? They will no longer be able to log in.')) return
     const res = await fetch(`/api/users/${id}`, { method: 'DELETE' })
     if (res.ok) await fetchData()
+  }
+
+  // ── Screensaver handlers ──
+
+  async function handleVerifyFolder() {
+    const id = ssFolderInput.trim()
+    if (!id) return
+    setSsFolderStatus(null)
+    setSsPhotoLoading(true)
+    try {
+      const res = await fetch('/api/screensaver/folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId: id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setSsFolderStatus({ type: 'err', msg: data.error ?? 'Verification failed' })
+      } else {
+        setSsFolderStatus({ type: 'ok', msg: `✓ "${data.folderName}" — ${data.photoCount} photo${data.photoCount !== 1 ? 's' : ''}` })
+        setSs(prev => ({ ...prev, googleDriveFolderId: id, googleDriveFolderName: data.folderName }))
+        // Load photos for single-photo picker
+        const photosRes = await fetch('/api/screensaver/photos')
+        if (photosRes.ok) {
+          const photosData = await photosRes.json()
+          setSsPhotos(photosData.photos ?? [])
+        }
+      }
+    } finally {
+      setSsPhotoLoading(false)
+    }
+  }
+
+  // Load photos when the section is first visited and a folder is already configured
+  useEffect(() => {
+    if (ss.googleDriveFolderId && ssPhotos.length === 0) {
+      fetch('/api/screensaver/photos')
+        .then(r => r.json())
+        .then(d => setSsPhotos(d.photos ?? []))
+        .catch(() => {})
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ss.googleDriveFolderId])
+
+  async function handleSaveScreensaver(patch: Partial<ScreensaverSettings>) {
+    const updated = { ...ss, ...patch }
+    setSs(updated)
+    setSsSaving(true)
+    try {
+      await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screensaver: updated }),
+      })
+    } finally {
+      setSsSaving(false)
+    }
   }
 
   if (loading) {
@@ -639,6 +721,233 @@ export default function SettingsPage() {
             </div>
           </section>
         )}
+
+        {/* Screensaver Section */}
+        <section
+          className="rounded-2xl p-6 flex flex-col gap-5"
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+        >
+          <div>
+            <h2 className="text-lg font-bold mb-1" style={{ color: 'var(--text)' }}>Screensaver</h2>
+            <p className="text-sm" style={{ color: 'var(--text-dim)' }}>
+              Show a photo slideshow or a single pinned photo after the display is idle.
+            </p>
+          </div>
+
+          {/* Enable toggle */}
+          <label className="flex items-center gap-3 cursor-pointer text-sm" style={{ color: 'var(--text)' }}>
+            <input
+              type="checkbox"
+              checked={ss.enabled}
+              onChange={e => handleSaveScreensaver({ enabled: e.target.checked })}
+              style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
+            />
+            Enable screensaver
+          </label>
+
+          {ss.enabled && (
+            <>
+              {/* Google Drive folder */}
+              <div className="flex flex-col gap-2">
+                <label className="field-label">Google Drive Folder ID</label>
+                <p className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                  Create a folder in Google Drive, set sharing to &quot;Anyone with the link → Viewer&quot;, then paste the folder ID from the URL
+                  (the long string after <code>/folders/</code>).
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g. 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs"
+                    value={ssFolderInput}
+                    onChange={e => { setSsFolderInput(e.target.value); setSsFolderStatus(null) }}
+                    className="flex-1"
+                  />
+                  <button
+                    onClick={handleVerifyFolder}
+                    disabled={!ssFolderInput.trim() || ssPhotoLoading}
+                    className="settings-btn-primary shrink-0"
+                  >
+                    {ssPhotoLoading ? 'Checking…' : 'Verify'}
+                  </button>
+                </div>
+                {ssFolderStatus && (
+                  <div
+                    className="text-sm"
+                    style={{ color: ssFolderStatus.type === 'ok' ? '#22c55e' : '#ff6b6b' }}
+                  >
+                    {ssFolderStatus.msg}
+                  </div>
+                )}
+                {ss.googleDriveFolderName && !ssFolderStatus && (
+                  <div className="text-xs" style={{ color: 'var(--text-faint)' }}>
+                    Current folder: <strong style={{ color: 'var(--text-dim)' }}>{ss.googleDriveFolderName}</strong>
+                  </div>
+                )}
+              </div>
+
+              {/* Mode toggle */}
+              <div className="flex flex-col gap-2">
+                <label className="field-label">Display mode</label>
+                <div className="flex gap-2">
+                  {(['slideshow', 'single'] as ScreensaverMode[]).map(m => (
+                    <button
+                      key={m}
+                      onClick={() => handleSaveScreensaver({ mode: m })}
+                      className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                      style={{
+                        background: ss.mode === m ? 'var(--accent)' : 'var(--surface2)',
+                        color: ss.mode === m ? '#fff' : 'var(--text-dim)',
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      {m === 'slideshow' ? '▶ Slideshow' : '📌 Single photo'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Single photo picker */}
+              {ss.mode === 'single' && ss.googleDriveFolderId && (
+                <div className="flex flex-col gap-2">
+                  <label className="field-label">
+                    Choose photo
+                    {ss.singlePhotoId && (
+                      <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-faint)' }}>
+                        (1 selected)
+                      </span>
+                    )}
+                  </label>
+                  {ssPhotos.length === 0 ? (
+                    <div className="text-sm" style={{ color: 'var(--text-faint)' }}>
+                      No photos found in folder. Make sure the folder has images and is publicly shared.
+                    </div>
+                  ) : (
+                    <div
+                      className="grid gap-2 overflow-y-auto"
+                      style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', maxHeight: 280 }}
+                    >
+                      {ssPhotos.map(photo => (
+                        <button
+                          key={photo.id}
+                          onClick={() => handleSaveScreensaver({ singlePhotoId: photo.id })}
+                          title={photo.name}
+                          className="relative rounded-lg overflow-hidden transition-all"
+                          style={{
+                            aspectRatio: '1',
+                            border: ss.singlePhotoId === photo.id
+                              ? '3px solid var(--accent)'
+                              : '2px solid var(--border)',
+                            padding: 0,
+                            background: 'var(--surface2)',
+                          }}
+                        >
+                          {photo.thumbnailLink ? (
+                            <img
+                              src={photo.thumbnailLink}
+                              alt={photo.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-xl">🖼</div>
+                          )}
+                          {ss.singlePhotoId === photo.id && (
+                            <div
+                              className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                              style={{ background: 'var(--accent)', color: '#fff' }}
+                            >
+                              ✓
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Slideshow options */}
+              {ss.mode === 'slideshow' && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex gap-4">
+                    <div className="flex flex-col gap-1.5 flex-1">
+                      <label className="field-label">Order</label>
+                      <select
+                        value={ss.order}
+                        onChange={e => handleSaveScreensaver({ order: e.target.value as 'chronological' | 'shuffle' })}
+                      >
+                        <option value="shuffle">Shuffle</option>
+                        <option value="chronological">Chronological</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1.5 flex-1">
+                      <label className="field-label">Seconds per slide</label>
+                      <input
+                        type="number"
+                        min={5}
+                        max={120}
+                        value={ss.secondsPerSlide}
+                        onChange={e => handleSaveScreensaver({ secondsPerSlide: Number(e.target.value) })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Common display options */}
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-4">
+                  <div className="flex flex-col gap-1.5 flex-1">
+                    <label className="field-label">Idle time (minutes)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={ss.idleMinutes}
+                      onChange={e => handleSaveScreensaver({ idleMinutes: Number(e.target.value) })}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5 flex-1">
+                    <label className="field-label">Photo fit</label>
+                    <select
+                      value={ss.fill}
+                      onChange={e => handleSaveScreensaver({ fill: e.target.value as 'fit' | 'fill' })}
+                    >
+                      <option value="fill">Fill (crop to fit)</option>
+                      <option value="fit">Fit (show full photo)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-3 cursor-pointer text-sm" style={{ color: 'var(--text)' }}>
+                    <input
+                      type="checkbox"
+                      checked={ss.showDateTime}
+                      onChange={e => handleSaveScreensaver({ showDateTime: e.target.checked })}
+                      style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
+                    />
+                    Show clock &amp; date overlay
+                  </label>
+                  {ss.fill === 'fit' && (
+                    <label className="flex items-center gap-3 cursor-pointer text-sm" style={{ color: 'var(--text)' }}>
+                      <input
+                        type="checkbox"
+                        checked={ss.blurBackground}
+                        onChange={e => handleSaveScreensaver({ blurBackground: e.target.checked })}
+                        style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
+                      />
+                      Blur background behind photo (fit mode)
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {ssSaving && (
+                <div className="text-xs" style={{ color: 'var(--text-faint)' }}>Saving…</div>
+              )}
+            </>
+          )}
+        </section>
 
         {/* Settings PIN Section */}
         <section
