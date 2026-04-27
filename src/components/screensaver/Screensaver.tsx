@@ -28,11 +28,13 @@ function formatClock(d: Date) {
 
 export function Screensaver({ settings, suppress = false }: Props) {
   const [active, setActive] = useState(false)
+  const [blocking, setBlocking] = useState(false)
   const [photos, setPhotos] = useState<DrivePhoto[]>([])
   const [currentIdx, setCurrentIdx] = useState(0)
   const [nextIdx, setNextIdx] = useState(1)
   const [transitioning, setTransitioning] = useState(false)
   const [clock, setClock] = useState(() => formatClock(new Date()))
+  const blockTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const slideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -138,6 +140,16 @@ export function Screensaver({ settings, suppress = false }: Props) {
   function dismiss() {
     setActive(false)
     resetIdle()
+    setBlocking(true)
+    if (blockTimer.current) clearTimeout(blockTimer.current)
+    blockTimer.current = setTimeout(() => setBlocking(false), 600)
+  }
+
+  // Clean up block timer on unmount
+  useEffect(() => () => { if (blockTimer.current) clearTimeout(blockTimer.current) }, [])
+
+  if (blocking) {
+    return <div className="fixed inset-0 z-[9999]" style={{ background: 'transparent' }} onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} />
   }
 
   if (!active || !settings.enabled) return null
