@@ -150,9 +150,10 @@ export interface ScreensaverSettings {
 export interface AppSettings {
   refreshInterval: number       // ms, default 300000 (5 min)
   defaultView: CalendarView
-  dimSchedule: {
-    start: string               // HH:MM
-    end: string                 // HH:MM
+  sleepSchedule: {
+    enabled: boolean
+    from: string                // HH:MM — when to sleep
+    to: string                  // HH:MM — when to wake
   }
   weather: {
     enabled: boolean

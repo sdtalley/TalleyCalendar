@@ -251,14 +251,25 @@ export async function removeAccount(id: string): Promise<boolean> {
 const DEFAULT_SETTINGS: AppSettings = {
   refreshInterval: 300000,
   defaultView: 'month' as CalendarView,
-  dimSchedule: { start: '22:00', end: '06:00' },
+  sleepSchedule: { enabled: false, from: '00:00', to: '06:00' },
   weather: { enabled: false, latitude: 0, longitude: 0, label: '' },
   settingsPin: '',
 }
 
 export async function getSettings(): Promise<AppSettings> {
-  const settings = await redis.get<AppSettings>(KEYS.settings)
-  return settings ?? DEFAULT_SETTINGS
+  const raw = await redis.get<AppSettings & { dimSchedule?: { start: string; end: string } }>(KEYS.settings)
+  if (!raw) return DEFAULT_SETTINGS
+  // Migrate legacy dimSchedule → sleepSchedule on first read after upgrade
+  if (!raw.sleepSchedule && raw.dimSchedule) {
+    const migrated: AppSettings = {
+      ...DEFAULT_SETTINGS,
+      ...raw,
+      sleepSchedule: { enabled: false, from: raw.dimSchedule.start, to: raw.dimSchedule.end },
+    }
+    await redis.set(KEYS.settings, migrated)
+    return migrated
+  }
+  return { ...DEFAULT_SETTINGS, ...raw }
 }
 
 export async function updateSettings(

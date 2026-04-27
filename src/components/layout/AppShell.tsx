@@ -9,11 +9,11 @@ import { MealsTab } from '@/components/tabs/MealsTab'
 import { ListsTab } from '@/components/tabs/ListsTab'
 import { SleepTab } from '@/components/tabs/SleepTab'
 import { Screensaver } from '@/components/screensaver/Screensaver'
-import { useScreenDim } from '@/hooks/useScreenDim'
+import { useSleepSchedule } from '@/hooks/useSleepSchedule'
 import type { ScreensaverSettings } from '@/lib/calendar/types'
 
 export function AppShell() {
-  useScreenDim()
+  const { isSleeping, wakeNow } = useSleepSchedule()
 
   const [activeTab, setActiveTab] = useState<TabId>('calendar')
   const [suppressScreensaver, setSuppressScreensaver] = useState(false)
@@ -47,9 +47,18 @@ export function AppShell() {
       {/* NavSidebar: left on desktop (order-first), bottom on mobile (order-last) */}
       <NavSidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
+      {/* Sleep overlay: full black screen during sleep window; touch anywhere to wake */}
+      {isSleeping && (
+        <div
+          className="fixed inset-0 bg-black"
+          style={{ zIndex: 99998 }}
+          onPointerDown={wakeNow}
+        />
+      )}
+
       {/* Screensaver: full-screen overlay, mounted once, z-index above everything */}
       {screensaverSettings && (
-        <Screensaver settings={screensaverSettings} suppress={suppressScreensaver} />
+        <Screensaver settings={screensaverSettings} suppress={suppressScreensaver || isSleeping} />
       )}
     </div>
   )

@@ -233,7 +233,7 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 
 **Phase 3D — Display Experience**
 - [x] Feature 10: Screensaver (Google Drive public folder + API key; slideshow + single-photo modes; idle detection; cross-fade; clock overlay; recipe suppression)
-- [ ] Feature 11: True sleep mode (full black overlay; scheduled; touch-to-wake)
+- [x] Feature 11: Sleep mode (`sleepSchedule` replaces `dimSchedule`; black overlay; `POST /api/sleep` rtcwake; `ENABLE_SYSTEM_SLEEP` guard; SleepTab UI; "Sleep Now" in Settings when `NEXT_PUBLIC_LOCAL_MODE=true`)
 - [ ] Feature 12: Countdowns (event flag; persistent CountdownBar; screensaver integration)
 - [ ] Feature 13: Calendar settings polish (weekStart, shadeWeekends, density, scheduleDays, displayName)
 - [ ] Feature 14: Wake-on-touch + brightness improvements
@@ -362,8 +362,10 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 AUTH_USERNAME=
 AUTH_PASSWORD=
 
-# ── Added in Phase 3D (screensaver) ──
-# GOOGLE_API_KEY=       # simple API key (not OAuth) for Google Drive photo folder access
+# ── Added in Phase 3D (screensaver + sleep) ──
+# GOOGLE_API_KEY=            # simple API key (not OAuth) for Google Drive photo folder access
+# ENABLE_SYSTEM_SLEEP=true   # local kiosk only — enables POST /api/sleep → rtcwake
+# NEXT_PUBLIC_LOCAL_MODE=true # local kiosk only — shows "Sleep Now" button in Settings
 
 # ── Added in Phase 3E (Web Push) ──
 # VAPID_PUBLIC_KEY=
@@ -615,6 +617,84 @@ Redis                        ├─ google.ts  → Google Calendar API
 - [x] TanStack Query → rejected; SWR works and migration cost not worth it
 - [ ] Sync frequency → 5-min polling default; webhook upgrade deferred to later
 - [ ] Full offline support → SW baseline done (pre-Phase 3 #5); complete offline deferred
+
+---
+
+## Lubuntu Wall Display Setup (Optiplex 3050)
+
+### One-time machine setup
+```bash
+# Node.js 20 LTS
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs git
+
+# Clone repo
+sudo mkdir -p /opt/familyhub && sudo chown $USER:$USER /opt/familyhub
+git clone https://github.com/<your-repo>/TalleyCalendar.git /opt/familyhub/app
+cd /opt/familyhub/app
+cp .env.example .env.local   # fill in all vars; set ENABLE_SYSTEM_SLEEP=true + NEXT_PUBLIC_LOCAL_MODE=true
+npm ci && npm run build
+```
+
+### systemd service (`/etc/systemd/system/familyhub.service`)
+```ini
+[Unit]
+Description=FamilyHub Calendar
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<your-username>
+WorkingDirectory=/opt/familyhub/app
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=10
+EnvironmentFile=/opt/familyhub/app/.env.local
+
+[Install]
+WantedBy=multi-user.target
+```
+```bash
+sudo systemctl daemon-reload && sudo systemctl enable --now familyhub
+```
+
+### Chromium kiosk autostart (`~/.config/autostart/kiosk.desktop`)
+```
+[Desktop Entry]
+Type=Application
+Name=FamilyHub Kiosk
+Exec=chromium-browser --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble --app=http://localhost:3000
+```
+
+### Auto-deploy: Phase 1 — polling (no Tailscale needed)
+```bash
+# /opt/familyhub/update.sh
+#!/bin/bash
+set -e
+cd /opt/familyhub/app
+CURRENT=$(git rev-parse HEAD)
+git pull --quiet origin main
+NEW=$(git rev-parse HEAD)
+if [ "$CURRENT" != "$NEW" ]; then
+  npm ci --omit=dev && npm run build
+  sudo systemctl restart familyhub
+  echo "$(date): $CURRENT → $NEW" >> /var/log/familyhub-update.log
+fi
+```
+Add to crontab: `*/5 * * * * /opt/familyhub/update.sh`
+
+### Auto-deploy: Phase 2 — instant via GitHub Actions + Tailscale
+GitHub Secrets needed: `TAILSCALE_AUTHKEY`, `OPTIPLEX_IP` (Tailscale IP), `OPTIPLEX_SSH_KEY`
+See `.github/workflows/deploy-local.yml` (add when Tailscale is live; disable cron when switching).
+
+### Hardware sleep + wake-on-touch
+1. **BIOS**: Power Management → USB Wake Support → Enabled; Wake on AC → Enabled
+2. **udev rule** (`/etc/udev/rules.d/90-usb-wake.rules`) — replace `XXXX` with touchscreen vendor ID from `lsusb`:
+   `ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="XXXX", RUN+="/bin/sh -c 'echo enabled > /sys$DEVPATH/power/wakeup'"`
+3. **rtcwake sudo** (`/etc/sudoers.d/familyhub`):
+   `<your-username> ALL=(ALL) NOPASSWD: /usr/sbin/rtcwake`
+4. **Test**: `sudo rtcwake -m mem -s 30` (suspends for 30s then wakes via RTC alarm)
 
 ---
 

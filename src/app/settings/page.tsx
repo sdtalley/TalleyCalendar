@@ -26,9 +26,7 @@ const SS_DEFAULTS: ScreensaverSettings = {
 export default function SettingsPage() {
   const [members, setMembers] = useState<FamilyMember[]>([])
   const [accounts, setAccounts] = useState<AccountSafe[]>([])
-  const [dimStart, setDimStart] = useState('22:00')
-  const [dimEnd, setDimEnd] = useState('06:00')
-  const [weatherEnabled, setWeatherEnabled] = useState(false)
+const [weatherEnabled, setWeatherEnabled] = useState(false)
   const [weatherLat, setWeatherLat] = useState('')
   const [weatherLon, setWeatherLon] = useState('')
   const [weatherLabel, setWeatherLabel] = useState('')
@@ -49,6 +47,9 @@ export default function SettingsPage() {
   const [newUserRole, setNewUserRole] = useState<AppUser['role']>('member')
   const [newUserMemberId, setNewUserMemberId] = useState<string>('')
   const [userFormError, setUserFormError] = useState('')
+
+  // Sleep schedule (for display in Settings — full management in SleepTab)
+  const [sleepSched, setSleepSched] = useState<AppSettings['sleepSchedule']>({ enabled: false, from: '00:00', to: '06:00' })
 
   // Screensaver settings state
   const [ss, setSs] = useState<ScreensaverSettings>(SS_DEFAULTS)
@@ -104,8 +105,6 @@ export default function SettingsPage() {
       setAccounts(await accountsRes.json())
       if (settingsRes.ok) {
         const settings: AppSettings = await settingsRes.json()
-        setDimStart(settings.dimSchedule.start)
-        setDimEnd(settings.dimSchedule.end)
         if (settings.weather) {
           setWeatherEnabled(settings.weather.enabled)
           setWeatherLat(settings.weather.latitude ? String(settings.weather.latitude) : '')
@@ -113,6 +112,7 @@ export default function SettingsPage() {
           setWeatherLabel(settings.weather.label || '')
         }
         setCurrentPin(settings.settingsPin || '')
+        if (settings.sleepSchedule) setSleepSched(settings.sleepSchedule)
         if (settings.screensaver) {
           setSs(settings.screensaver)
           setSsFolderInput(settings.screensaver.googleDriveFolderId ?? '')
@@ -438,50 +438,50 @@ export default function SettingsPage() {
           />
         </section>
 
-        {/* Screen Dimming Section */}
+        {/* Sleep Schedule Section */}
         <section
           className="rounded-2xl p-6"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
         >
           <h2 className="text-lg font-bold mb-1" style={{ color: 'var(--text)' }}>
-            Screen Dimming
+            Sleep Schedule
           </h2>
           <p className="text-sm mb-4" style={{ color: 'var(--text-dim)' }}>
-            Automatically dim the display during nighttime hours (for kiosk/tablet use).
+            Hardware sleep suspends the display completely during overnight hours. Configure in the Sleep tab.
           </p>
-          <div className="flex gap-4 items-end">
-            <div className="flex flex-col gap-1.5 flex-1">
-              <label className="field-label">Dim at</label>
-              <input
-                type="time"
-                value={dimStart}
-                onChange={e => setDimStart(e.target.value)}
-              />
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🌙</span>
+            <div className="text-sm" style={{ color: 'var(--text-dim)' }}>
+              Sleep from <strong style={{ color: 'var(--text)' }}>{sleepSched?.from ?? '00:00'}</strong> to <strong style={{ color: 'var(--text)' }}>{sleepSched?.to ?? '06:00'}</strong>
+              {sleepSched?.enabled
+                ? <span className="ml-2 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e' }}>Enabled</span>
+                : <span className="ml-2 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'var(--surface2)', color: 'var(--text-faint)' }}>Disabled</span>
+              }
             </div>
-            <div className="flex flex-col gap-1.5 flex-1">
-              <label className="field-label">Brighten at</label>
-              <input
-                type="time"
-                value={dimEnd}
-                onChange={e => setDimEnd(e.target.value)}
-              />
-            </div>
-            <button
-              onClick={async () => {
-                const res = await fetch('/api/settings', {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ dimSchedule: { start: dimStart, end: dimEnd } }),
-                })
-                if (res.ok) setError(null)
-                else setError('Failed to save dim schedule.')
-              }}
-              className="settings-btn-primary"
-              style={{ marginBottom: 2 }}
-            >
-              Save
-            </button>
           </div>
+
+          {/* Sleep Now — only shown on local deployment */}
+          {process.env.NEXT_PUBLIC_LOCAL_MODE === 'true' && (
+            <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--border)' }}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium" style={{ color: 'var(--text)' }}>Sleep Now</div>
+                  <div className="text-xs" style={{ color: 'var(--text-dim)' }}>
+                    Immediately suspend this display. Touch screen to wake.
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    const res = await fetch('/api/sleep', { method: 'POST' })
+                    if (!res.ok) setError('Sleep command failed — check that ENABLE_SYSTEM_SLEEP=true is set.')
+                  }}
+                  className="settings-btn-primary shrink-0"
+                >
+                  Sleep Now
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Weather Section */}
