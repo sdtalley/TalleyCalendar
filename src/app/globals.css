@@ -217,3 +217,40 @@ input[type='date']::-webkit-calendar-picker-indicator,
 input[type='time']::-webkit-calendar-picker-indicator {
   filter: invert(0.6);
 }
+
+/* ── Virtual keyboard (react-simple-keyboard) theme overrides ── */
+.familyhub-keyboard.hg-theme-default {
+  background: var(--surface);
+  padding: 10px 8px 14px;
+  border-radius: 0;
+  font-family: 'DM Sans', sans-serif;
+}
+.familyhub-keyboard .hg-button {
+  background: var(--surface2);
+  border-bottom: 2px solid var(--surface3);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+  height: 44px;
+  box-shadow: none;
+}
+.familyhub-keyboard .hg-button:active,
+.familyhub-keyboard .hg-button.hg-activeButton {
+  background: var(--accent);
+  color: #fff;
+  border-bottom-color: rgba(108,140,255,0.3);
+}
+.familyhub-keyboard .hg-button[data-skbtn='{space}'] {
+  background: var(--surface3);
+  min-width: 200px;
+}
+.familyhub-keyboard .hg-button[data-skbtn='{bksp}'],
+.familyhub-keyboard .hg-button[data-skbtn='{enter}'],
+.familyhub-keyboard .hg-button[data-skbtn='{shift}'],
+.familyhub-keyboard .hg-button[data-skbtn='{lock}'],
+.familyhub-keyboard .hg-button[data-skbtn='{tab}'] {
+  background: var(--surface3);
+  color: var(--text-dim);
+  font-size: 18px;
+}

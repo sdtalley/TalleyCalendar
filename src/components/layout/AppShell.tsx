@@ -9,11 +9,14 @@ import { MealsTab } from '@/components/tabs/MealsTab'
 import { ListsTab } from '@/components/tabs/ListsTab'
 import { SleepTab } from '@/components/tabs/SleepTab'
 import { Screensaver } from '@/components/screensaver/Screensaver'
+import { VirtualKeyboard } from '@/components/keyboard/VirtualKeyboard'
 import { useSleepSchedule } from '@/hooks/useSleepSchedule'
+import { useVirtualKeyboard } from '@/hooks/useVirtualKeyboard'
 import type { ScreensaverSettings } from '@/lib/calendar/types'
 
 export function AppShell() {
   const { isSleeping, wakeNow } = useSleepSchedule()
+  const keyboard = useVirtualKeyboard()
 
   const [activeTab, setActiveTab] = useState<TabId>('calendar')
   const [suppressScreensaver, setSuppressScreensaver] = useState(false)
@@ -60,6 +63,13 @@ export function AppShell() {
       {screensaverSettings && (
         <Screensaver settings={screensaverSettings} suppress={suppressScreensaver || isSleeping} />
       )}
+
+      {/* Virtual keyboard: slides up from bottom on input focus (kiosk only) */}
+      <VirtualKeyboard
+        isVisible={keyboard.isVisible}
+        inputType={keyboard.inputType}
+        focusedInput={keyboard.focusedInput}
+      />
     </div>
   )
 }

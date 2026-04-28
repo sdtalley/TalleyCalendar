@@ -1,6 +1,6 @@
 # FamilyHub Calendar — Master Project Specification
 
-**Current state (2026-04-26):** Phase 3B + 3C complete. Phase 3D Feature 10 (Screensaver) done. `ScreensaverSettings` type, `GOOGLE_API_KEY` env var, `GET /api/screensaver/photos` + `POST /api/screensaver/folder` API routes, `Screensaver.tsx` component (idle detection, slideshow + single-photo modes, cross-fade, clock overlay, touch-to-dismiss, recipe suppression), Screensaver settings section in Settings page (folder verify, mode toggle, photo picker grid, all sliders). Next: Feature 11 (Sleep mode, Phase 3D).  
+**Current state (2026-04-28):** Phase 3B + 3C + 3D Features 10–11 complete. In-App Virtual Keyboard (kiosk infra) + Minimize to Desktop button shipped. Next: Feature 12 Countdowns (Phase 3D).  
 **Detailed Phase 3 implementation specs:** see Claude Code memory → `phase3_implementation_plan.md`
 
 ---
@@ -117,6 +117,7 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 | Framework | Next.js 14+ (App Router) | Vercel-native, SSR, API routes |
 | UI | React + Tailwind CSS | Dark theme, responsive |
 | Gesture | @use-gesture/react | Touch-first drag-to-reschedule |
+| On-Screen Keyboard | react-simple-keyboard | In-app virtual keyboard for kiosk touch input (OS keyboard onboard incompatible with Chromium on Ubuntu 22.04+). Auto-shows on input focus via `useVirtualKeyboard` hook (gated on `NEXT_PUBLIC_LOCAL_MODE=true`). z-[1000]. |
 | Validation | Zod | `parseBody<T>()` in `src/lib/validate.ts` — all API routes |
 | Google | Google Calendar API v3 | OAuth 2.0, full CRUD |
 | Apple | CalDAV via tsdav | App-specific password, read-only |
@@ -234,6 +235,7 @@ Off-the-shelf solutions (Echo Show 15, Skylight, Cozyla) are either too expensiv
 **Phase 3D — Display Experience**
 - [x] Feature 10: Screensaver (Google Drive public folder + API key; slideshow + single-photo modes; idle detection; cross-fade; clock overlay; recipe suppression)
 - [x] Feature 11: Sleep mode (`sleepSchedule` replaces `dimSchedule`; black overlay; `POST /api/sleep` rtcwake; `ENABLE_SYSTEM_SLEEP` guard; SleepTab UI; "Sleep Now" in Settings when `NEXT_PUBLIC_LOCAL_MODE=true`)
+- [x] Kiosk infra: In-app virtual keyboard (`react-simple-keyboard`; `useVirtualKeyboard` hook; auto-shows on input focus; gated on `NEXT_PUBLIC_LOCAL_MODE=true`; z-[1000]) + Minimize to Desktop (`POST /api/system/minimize`; xdotool; Settings → Kiosk section)
 - [ ] Feature 12: Countdowns (event flag; persistent CountdownBar; screensaver integration)
 - [ ] Feature 13: Calendar settings polish (weekStart, shadeWeekends, density, scheduleDays, displayName)
 - [ ] Feature 14: Wake-on-touch + brightness improvements
@@ -659,6 +661,23 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload && sudo systemctl enable --now familyhub
 ```
 
+### On-screen keyboard
+`onboard` (Ubuntu's OS keyboard) is permanently incompatible with Chromium on Ubuntu 22.04+: Chromium's AT-SPI events corrupt onboard's state, breaking it for all apps. The solution is an **in-app virtual keyboard** built into the React app using `react-simple-keyboard`. It auto-shows when any text field gains focus (via a document-level `focusin` listener in AppShell) and auto-hides on blur. Skips date/time/checkbox inputs. Two layouts: QWERTY and numeric pad. Mounted in `AppShell.tsx` at z-[1000].
+
+Key files:
+- `src/hooks/useVirtualKeyboard.ts` — document-level focusin/focusout listener; gated on `NEXT_PUBLIC_LOCAL_MODE=true`; returns `{ isVisible, inputType, focusedInput }`
+- `src/components/keyboard/VirtualKeyboard.tsx` — fixed bottom overlay; syncs with React controlled inputs via native value setter + input event dispatch; cursor-position aware
+
+onboard is still installed and autostarted (works for native GTK apps outside the browser) but should not be relied on for the kiosk app itself.
+
+### Minimize to desktop
+Settings page → Kiosk section (gated on `NEXT_PUBLIC_LOCAL_MODE=true`) has a "Minimize" button that calls `POST /api/system/minimize`. Minimizes the Chromium window to access the Lubuntu desktop for native app access.
+
+Requires `xdotool` installed on the Optiplex:
+```bash
+sudo apt install xdotool
+```
+
 ### Chromium kiosk autostart (`~/.config/autostart/kiosk.desktop`)
 ```
 [Desktop Entry]
@@ -672,7 +691,7 @@ Exec=chromium-browser --kiosk --noerrdialogs --disable-infobars --disable-sessio
 [Desktop Entry]
 Type=Application
 Name=Onboard
-Exec=onboard
+Exec=bash -c "sleep 5 && onboard"
 ```
 Enable auto-show: open Onboard → Preferences → Auto-show → enable "Auto-show when editing text".
 

@@ -949,6 +949,40 @@ const [weatherEnabled, setWeatherEnabled] = useState(false)
           )}
         </section>
 
+        {/* Kiosk Section — only shown on local deployment */}
+        {process.env.NEXT_PUBLIC_LOCAL_MODE === 'true' && (
+          <section
+            className="rounded-2xl p-6"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+          >
+            <h2 className="text-lg font-bold mb-1" style={{ color: 'var(--text)' }}>
+              Kiosk
+            </h2>
+            <p className="text-sm mb-4" style={{ color: 'var(--text-dim)' }}>
+              Controls for the wall display kiosk hardware.
+            </p>
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium" style={{ color: 'var(--text)' }}>Minimize to Desktop</div>
+                  <div className="text-xs" style={{ color: 'var(--text-dim)' }}>
+                    Minimize Chromium to access the Lubuntu desktop (terminal, file manager, etc.).
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    const res = await fetch('/api/system/minimize', { method: 'POST' })
+                    if (!res.ok) setError('Minimize failed — check that xdotool is installed (sudo apt install xdotool).')
+                  }}
+                  className="settings-btn-secondary shrink-0"
+                >
+                  Minimize
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Settings PIN Section */}
         <section
           className="rounded-2xl p-6"
