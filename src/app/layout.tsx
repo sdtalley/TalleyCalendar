@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { ServiceWorkerRegistration } from '@/components/ServiceWorkerRegistration'
+import { KeyboardOverlay } from '@/components/keyboard/KeyboardOverlay'
 
 export const metadata: Metadata = {
   title: 'FamilyHub Calendar',
@@ -18,6 +19,7 @@ export default function RootLayout({
     <html lang="en">
       <body style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
         <ServiceWorkerRegistration />
+        <KeyboardOverlay />
         {children}
       </body>
     </html>

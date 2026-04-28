@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useRef, useEffect } from 'react'
+import { useCallback, useRef, useEffect, useState } from 'react'
 import Keyboard from 'react-simple-keyboard'
 import 'react-simple-keyboard/build/css/index.css'
 import type { SimpleKeyboard } from 'react-simple-keyboard'
@@ -12,38 +12,31 @@ interface Props {
   focusedInput: HTMLInputElement | HTMLTextAreaElement | null
 }
 
-// Lazy-initialized on first use (safe for SSR — never called on server)
+// Lazy-initialized — safe for SSR (never called on server)
 let nativeInputSetter: ((this: HTMLInputElement, v: string) => void) | undefined
 let nativeTextareaSetter: ((this: HTMLTextAreaElement, v: string) => void) | undefined
 
 function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
-  if (!nativeInputSetter) {
-    nativeInputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
-  }
-  if (!nativeTextareaSetter) {
-    nativeTextareaSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
-  }
-  if (el instanceof HTMLTextAreaElement) {
-    nativeTextareaSetter?.call(el, value)
-  } else {
-    nativeInputSetter?.call(el, value)
-  }
+  if (!nativeInputSetter) nativeInputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  if (!nativeTextareaSetter) nativeTextareaSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+  if (el instanceof HTMLTextAreaElement) nativeTextareaSetter?.call(el, value)
+  else nativeInputSetter?.call(el, value)
   el.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
 const QWERTY_LAYOUT = {
   default: [
-    '` 1 2 3 4 5 6 7 8 9 0 - = {bksp}',
-    '{tab} q w e r t y u i o p [ ] \\',
-    '{lock} a s d f g h j k l ; \' {enter}',
-    '{shift} z x c v b n m , . / {shift}',
+    '1 2 3 4 5 6 7 8 9 0 {bksp}',
+    'q w e r t y u i o p',
+    'a s d f g h j k l {enter}',
+    '{shift} z x c v b n m , . {shift}',
     '{space}',
   ],
   shift: [
-    '~ ! @ # $ % ^ & * ( ) _ + {bksp}',
-    '{tab} Q W E R T Y U I O P { } |',
-    '{lock} A S D F G H J K L : " {enter}',
-    '{shift} Z X C V B N M < > ? {shift}',
+    '! @ # $ % ^ & * ( ) {bksp}',
+    'Q W E R T Y U I O P',
+    'A S D F G H J K L {enter}',
+    '{shift} Z X C V B N M < > {shift}',
     '{space}',
   ],
 }
@@ -59,11 +52,9 @@ const NUMERIC_LAYOUT = {
 
 const QWERTY_DISPLAY = {
   '{bksp}': '⌫',
-  '{enter}': '↵',
+  '{enter}': '↵ Enter',
   '{shift}': '⇧',
-  '{tab}': '↹',
-  '{lock}': '⇪',
-  '{space}': ' ',
+  '{space}': 'Space',
 }
 
 const NUMERIC_DISPLAY = {
@@ -73,19 +64,24 @@ const NUMERIC_DISPLAY = {
 
 export function VirtualKeyboard({ isVisible, inputType, focusedInput }: Props) {
   const keyboardRef = useRef<SimpleKeyboard | null>(null)
+  const [layoutName, setLayoutName] = useState<'default' | 'shift'>('default')
 
-  // When the focused input changes, sync keyboard value to current input value
+  // Sync keyboard display value when focused input changes
   useEffect(() => {
     if (focusedInput && keyboardRef.current) {
       keyboardRef.current.setInput(focusedInput.value)
     }
+    setLayoutName('default')
   }, [focusedInput])
 
   const onKeyPress = useCallback((button: string) => {
+    if (button === '{shift}') {
+      setLayoutName(prev => prev === 'default' ? 'shift' : 'default')
+      return
+    }
+
     const input = focusedInput
     if (!input) return
-
-    if (button === '{shift}' || button === '{lock}' || button === '{tab}') return
 
     const start = input.selectionStart ?? input.value.length
     const end = input.selectionEnd ?? input.value.length
@@ -125,12 +121,15 @@ export function VirtualKeyboard({ isVisible, inputType, focusedInput }: Props) {
       return
     }
 
-    // Regular character
+    // Regular character — auto-shift back to default after one capital
     const next = current.slice(0, start) + button + current.slice(end)
     setNativeValue(input, next)
     requestAnimationFrame(() => input.setSelectionRange(start + button.length, start + button.length))
     keyboardRef.current?.setInput(input.value)
-  }, [focusedInput])
+    if (layoutName === 'shift') setLayoutName('default')
+  }, [focusedInput, layoutName])
+
+  const maxW = inputType === 'numeric' ? 260 : 700
 
   return (
     <div
@@ -140,20 +139,23 @@ export function VirtualKeyboard({ isVisible, inputType, focusedInput }: Props) {
         transform: isVisible ? 'translateY(0)' : 'translateY(100%)',
         background: 'var(--surface)',
         borderTop: '1px solid var(--border)',
-        boxShadow: '0 -4px 24px rgba(0,0,0,0.4)',
+        boxShadow: '0 -8px 32px rgba(0,0,0,0.5)',
+        paddingBottom: 'env(safe-area-inset-bottom)',
       }}
-      // Prevent keyboard clicks from stealing focus away from the input
       onMouseDown={e => e.preventDefault()}
       onPointerDown={e => e.preventDefault()}
     >
-      <Keyboard
-        keyboardRef={(r: SimpleKeyboard) => { keyboardRef.current = r }}
-        onKeyPress={onKeyPress}
-        layout={inputType === 'numeric' ? NUMERIC_LAYOUT : QWERTY_LAYOUT}
-        display={inputType === 'numeric' ? NUMERIC_DISPLAY : QWERTY_DISPLAY}
-        theme="hg-theme-default hg-layout-default familyhub-keyboard"
-        mergeDisplay
-      />
+      <div style={{ maxWidth: maxW, margin: '0 auto', padding: '10px 12px 14px' }}>
+        <Keyboard
+          keyboardRef={(r: SimpleKeyboard) => { keyboardRef.current = r }}
+          onKeyPress={onKeyPress}
+          layout={inputType === 'numeric' ? NUMERIC_LAYOUT : QWERTY_LAYOUT}
+          display={inputType === 'numeric' ? NUMERIC_DISPLAY : QWERTY_DISPLAY}
+          layoutName={layoutName}
+          theme={`hg-theme-default familyhub-keyboard${layoutName === 'shift' ? ' shift-active' : ''}`}
+          mergeDisplay
+        />
+      </div>
     </div>
   )
 }

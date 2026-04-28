@@ -24,14 +24,17 @@ export function useVirtualKeyboard(): VirtualKeyboardState {
     if (!isKiosk) return
 
     function onFocusIn(e: FocusEvent) {
-      const target = e.target as HTMLElement
-      if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) return
-      if (target instanceof HTMLInputElement && SKIP_TYPES.has(target.type)) return
-
+      // Always cancel a pending hide, regardless of what gained focus —
+      // otherwise clicking a Cancel button starts the timer, then the next
+      // modal's input focus arrives but the stale timer fires and hides the keyboard
       if (hideTimer.current) {
         clearTimeout(hideTimer.current)
         hideTimer.current = null
       }
+
+      const target = e.target as HTMLElement
+      if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLTextAreaElement)) return
+      if (target instanceof HTMLInputElement && SKIP_TYPES.has(target.type)) return
 
       const numericTypes = new Set(['number', 'tel'])
       const isNumeric =
