@@ -664,8 +664,17 @@ sudo systemctl daemon-reload && sudo systemctl enable --now familyhub
 [Desktop Entry]
 Type=Application
 Name=FamilyHub Kiosk
-Exec=chromium-browser --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble --app=http://localhost:3000
+Exec=chromium-browser --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble --force-renderer-accessibility --app=http://localhost:3000
 ```
+
+### On-screen keyboard autostart (`~/.config/autostart/onboard.desktop`)
+```
+[Desktop Entry]
+Type=Application
+Name=Onboard
+Exec=onboard
+```
+Enable auto-show: open Onboard → Preferences → Auto-show → enable "Auto-show when editing text".
 
 ### Auto-deploy: Phase 1 — polling (no Tailscale needed)
 ```bash
