@@ -24,7 +24,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    execSync('xdotool search --name "Chromium" windowminimize', { timeout: 3000 })
+    // DISPLAY must be set explicitly — the Node.js service runs without X11 env vars
+    // --class matches the WM_CLASS property (reliable in kiosk mode where window
+    // title changes with the active tab)
+    execSync('xdotool search --class chromium windowminimize', {
+      timeout: 3000,
+      env: { ...process.env, DISPLAY: ':0' },
+    })
     return NextResponse.json({ ok: true })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
