@@ -61,6 +61,11 @@ body {
   -webkit-user-select: none;
 }
 
+.kiosk-mode,
+.kiosk-mode * {
+  cursor: none !important;
+}
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar {
   width: 6px;

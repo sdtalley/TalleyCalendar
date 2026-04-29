@@ -17,7 +17,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <body
+        className={process.env.NEXT_PUBLIC_LOCAL_MODE === 'true' ? 'kiosk-mode' : ''}
+        style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}
+      >
         <ServiceWorkerRegistration />
         <KeyboardOverlay />
         {children}
