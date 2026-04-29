@@ -225,9 +225,11 @@ input[type='time']::-webkit-calendar-picker-indicator {
   filter: invert(0.6);
 }
 
-/* ── Virtual keyboard (react-simple-keyboard) theme overrides ── */
+/* ── Virtual keyboard (react-simple-keyboard) theme overrides ──
+   !important needed: library CSS is injected after globals.css in Next.js
+   and hardcodes background:#fff / background-color:#ececec on buttons     */
 .familyhub-keyboard.hg-theme-default {
-  background: transparent;
+  background: transparent !important;
   padding: 0;
   border-radius: 0;
   font-family: 'DM Sans', sans-serif;
@@ -243,11 +245,11 @@ input[type='time']::-webkit-calendar-picker-indicator {
   justify-content: center;
 }
 .familyhub-keyboard .hg-button {
-  background: var(--surface2);
-  border: none;
-  border-bottom: 3px solid #0a0c13;
+  background: var(--surface2) !important;
+  border: none !important;
+  border-bottom: 3px solid #0a0c13 !important;
   border-radius: 8px;
-  color: var(--text);
+  color: var(--text) !important;
   font-family: 'DM Sans', sans-serif;
   font-size: 17px;
   font-weight: 500;
@@ -259,51 +261,51 @@ input[type='time']::-webkit-calendar-picker-indicator {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: none;
+  box-shadow: none !important;
   transition: background 0.08s, transform 0.08s;
   user-select: none;
 }
 .familyhub-keyboard .hg-button:active {
-  background: var(--accent);
-  color: #fff;
-  border-bottom-color: rgba(108,140,255,0.4);
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-bottom-color: rgba(108,140,255,0.4) !important;
   transform: translateY(1px);
 }
 /* Space bar */
 .familyhub-keyboard .hg-button[data-skbtn='{space}'] {
-  background: var(--surface3);
+  background: var(--surface3) !important;
   max-width: 420px;
   flex: 5;
   font-size: 13px;
-  color: var(--text-dim);
+  color: var(--text-dim) !important;
   letter-spacing: 0.05em;
 }
 /* Function keys */
 .familyhub-keyboard .hg-button[data-skbtn='{bksp}'] {
-  background: var(--surface3);
-  color: var(--text-dim);
+  background: var(--surface3) !important;
+  color: var(--text-dim) !important;
   font-size: 20px;
   max-width: 90px;
   flex: 1.5;
 }
 .familyhub-keyboard .hg-button[data-skbtn='{enter}'] {
-  background: var(--surface3);
-  color: var(--text-dim);
+  background: var(--surface3) !important;
+  color: var(--text-dim) !important;
   font-size: 14px;
   font-weight: 600;
   max-width: 110px;
   flex: 1.8;
 }
 .familyhub-keyboard .hg-button[data-skbtn='{shift}'] {
-  background: var(--surface3);
-  color: var(--text-dim);
+  background: var(--surface3) !important;
+  color: var(--text-dim) !important;
   font-size: 20px;
   max-width: 90px;
   flex: 1.5;
 }
 /* Active shift */
 .familyhub-keyboard.shift-active .hg-button[data-skbtn='{shift}'] {
-  background: var(--accent);
-  color: #fff;
-  border-bottom-color: rgba(108,140,255,0.4);
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-bottom-color: rgba(108,140,255,0.4) !important;
 }
