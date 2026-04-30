@@ -55,7 +55,18 @@ const VIEWS: { id: CalendarView; label: string }[] = [
 // ── CalendarTab ────────────────────────────────────────────────────────────
 
 export function CalendarTab() {
-  const [scheduleDays, setScheduleDays] = useState(7)
+  const [scheduleDays, setScheduleDays] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem('calendar-schedule-days')
+      const n = stored ? parseInt(stored, 10) : NaN
+      return n >= 1 && n <= 7 ? n : 7
+    } catch { return 7 }
+  })
+
+  const handleScheduleDaysChange = (n: number) => {
+    try { localStorage.setItem('calendar-schedule-days', String(n)) } catch { /* ignore */ }
+    setScheduleDays(n)
+  }
   const { currentDate, selectedDate, view, goToday, goPrev, goNext, selectDate, changeView } =
     useCalendarNavigation(scheduleDays)
 
@@ -361,7 +372,7 @@ export function CalendarTab() {
 
       <ViewDropdown views={VIEWS} view={view} onViewChange={changeView} />
       {view === 'schedule' && (
-        <DayCountPicker value={scheduleDays} onChange={setScheduleDays} />
+        <DayCountPicker value={scheduleDays} onChange={handleScheduleDaysChange} />
       )}
 
       {/* Filter panel — profiles + calendar types inside */}
